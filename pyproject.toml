@@ -7,7 +7,7 @@ packages = ["src/emmaemb"]
 
 [project]
 name = "emmaemb"
-version = "1.0.0"
+version = "1.0.3"
 authors = [
   { name="Francesca Rissom", email="francesca.rissom@hpi.de" },
   { name="Paulo Yanez Sarmiento", email="paul.yanze@hpi.de" },
@@ -22,29 +22,29 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
-    "importlib-metadata==8.5.0",
-    "joblib==1.4.2",
-    "llvmlite==0.41.1",
-    "narwhals==1.24.1",
-    "numba==0.58.1",
-    "numpy==1.24.4",
-    "packaging==24.2",
-    "pandas==2.0.3",
-    "patsy==1.0.1",
-    "plotly==6.0.0",
-    "plotly-express==0.4.1",
-    "pynndescent==0.5.13",
-    "python-dateutil==2.9.0.post0",
-    "pytz==2024.2",
-    "scikit-learn==1.3.2",
-    "scipy==1.10.1",
-    "six==1.17.0",
-    "statsmodels==0.14.1",
-    "threadpoolctl==3.5.0",
-    "tqdm==4.67.1",
-    "tzdata==2025.1",
-    "umap-learn==0.5.7",
-    "zipp==3.20.2",
+    "importlib-metadata>=8.5.0",
+    "joblib>=1.4.2",
+    "llvmlite>=0.41.1",
+    "narwhals>=1.24.1",
+    "numba>=0.58.1",
+    "numpy>=1.24.4",
+    "packaging>=24.2",
+    "pandas>=2.0.3",
+    "patsy>=1.0.1",
+    "plotly>=6.0.0",
+    "plotly-express>=0.4.1",
+    "pynndescent>=0.5.13",
+    "python-dateutil>=2.9.0.post0",
+    "pytz>=2024.2",
+    "scikit-learn>=1.3.2",
+    "scipy>=1.10.1",
+    "six>=1.17.0",
+    "statsmodels>=0.14.1",
+    "threadpoolctl>=3.5.0",
+    "tqdm>=4.67.1",
+    "tzdata>=2025.1",
+    "umap-learn>=0.5.7",
+    "zipp>=3.20.2",
 ]
 
 [project.urls]
