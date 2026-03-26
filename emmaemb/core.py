@@ -236,6 +236,11 @@ class Emma:
                 )
             )
 
+        # Cast to float32 to avoid overflow in downstream numerical ops
+        # (e.g. pairwise distances, variance) when embeddings are stored as float16
+        if embeddings.dtype == np.float16:
+            embeddings = embeddings.astype(np.float32)
+
         # Add the embedding space
         self.emb[emb_space_name] = {
             "emb": embeddings,
@@ -420,6 +425,53 @@ class Emma:
 
         else:
             print(f"Pairwise distances using {metric} already calculated.")
+
+    def mean_center(self, emb_spaces: list = None):
+        """Apply mean-centering to embedding spaces in-place.
+
+        Subtracts the per-dimension mean from each embedding space.
+        The original embeddings are preserved internally so the operation
+        can be reverted with revert_mean_centering().
+        Any cached pairwise distances, ranks, and 2-D projections are
+        cleared, since they were computed on the original embeddings.
+
+        Args:
+            emb_spaces (list, optional): Names of embedding spaces to centre.
+                Defaults to None, which centres all spaces.
+        """
+        targets = emb_spaces if emb_spaces is not None else list(self.emb.keys())
+        for emb_space in targets:
+            self._check_for_emb_space(emb_space)
+            if self.emb[emb_space].get("_mean_centered", False):
+                print(f"'{emb_space}' is already mean-centred, skipping.")
+                continue
+            X = self.emb[emb_space]["emb"]
+            self.emb[emb_space]["_emb_original"] = X
+            self.emb[emb_space]["emb"] = X - X.mean(axis=0)
+            self.emb[emb_space]["_mean_centered"] = True
+            # Clear caches that depend on the raw embeddings
+            for key in ("pairwise_distances", "ranks", "annoy_index", "annoy_ranks", "2d"):
+                self.emb[emb_space].pop(key, None)
+            print(f"'{emb_space}' mean-centred. Cached distances and projections cleared.")
+
+    def revert_mean_centering(self, emb_spaces: list = None):
+        """Revert mean-centred embedding spaces to their original values.
+
+        Args:
+            emb_spaces (list, optional): Names of embedding spaces to revert.
+                Defaults to None, which reverts all mean-centred spaces.
+        """
+        targets = emb_spaces if emb_spaces is not None else list(self.emb.keys())
+        for emb_space in targets:
+            self._check_for_emb_space(emb_space)
+            if not self.emb[emb_space].get("_mean_centered", False):
+                print(f"'{emb_space}' is not mean-centred, skipping.")
+                continue
+            self.emb[emb_space]["emb"] = self.emb[emb_space].pop("_emb_original")
+            self.emb[emb_space]["_mean_centered"] = False
+            for key in ("pairwise_distances", "ranks", "annoy_index", "annoy_ranks", "2d"):
+                self.emb[emb_space].pop(key, None)
+            print(f"'{emb_space}' reverted to original embeddings. Cached distances and projections cleared.")
 
     def get_pairwise_distances(
         self, emb_space: str, metric: str = "euclidean"
