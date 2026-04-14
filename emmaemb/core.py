@@ -1,4 +1,5 @@
 import os
+import warnings
 
 import math
 import numpy as np
@@ -20,6 +21,32 @@ from emmaemb.config import EMB_SPACE_COLORS, DISTANCE_METRIC_ALIASES
 
 
 GPU_BATCH_SIZE = 100
+
+
+def _check_memory(required_bytes: int, label: str = "") -> None:
+    """Warn if estimated free RAM is insufficient for an upcoming operation.
+
+    Requires ``psutil``; silently skips the check if it is not installed.
+
+    Args:
+        required_bytes (int): Estimated bytes the operation will allocate.
+        label (str): Short description shown in the warning message.
+    """
+    try:
+        import psutil
+        available = psutil.virtual_memory().available
+        if required_bytes > available * 0.9:
+            warnings.warn(
+                f"{label}: operation needs ~{required_bytes / 1e9:.1f} GB but "
+                f"only {available / 1e9:.1f} GB of RAM is free. "
+                "Consider using store_distances=False or reducing dataset size "
+                "to avoid an out-of-memory crash.",
+                ResourceWarning,
+                stacklevel=3,
+            )
+    except ImportError:
+        pass  # psutil not installed — skip the check silently
+
 
 class Emma:
     def __init__(self, feature_data: pd.DataFrame):
@@ -161,16 +188,29 @@ class Emma:
         file_extension (str): Extension of the embedding files. Default 'npy'.
         """
 
-        embeddings = []
-        for sample in self.sample_names:
+        # Load first file to determine shape and dtype, then preallocate.
+        # This avoids the 2× peak memory of building a list then calling np.stack.
+        first_file = os.path.join(dir_path, f"{self.sample_names[0]}.{file_extension}")
+        if not os.path.isfile(first_file):
+            raise ValueError(f"Embedding file '{first_file}' not found.")
+        first_emb = np.load(first_file)
+        _check_memory(
+            first_emb.nbytes * len(self.sample_names),
+            label="add_emb_space",
+        )
+        embeddings = np.empty(
+            (len(self.sample_names),) + first_emb.shape, dtype=first_emb.dtype
+        )
+        embeddings[0] = first_emb
+        for i, sample in enumerate(self.sample_names[1:], start=1):
             emb_file = os.path.join(dir_path, f"{sample}.{file_extension}")
             if not os.path.isfile(emb_file):
                 raise ValueError(f"Embedding file '{emb_file}' not found.")
-            embeddings.append(np.load(emb_file))
-        return np.stack(embeddings)
+            embeddings[i] = np.load(emb_file)
+        return embeddings
 
-    def _assign_colour_to_embedding_space(self, num_emb_spaces: int) -> str:
-        """Assign a colour to the embedding space."""
+    def _assign_color_to_embedding_space(self, num_emb_spaces: int) -> str:
+        """Assign a color to the embedding space."""
         return EMB_SPACE_COLORS[
             (num_emb_spaces - len(EMB_SPACE_COLORS)) % len(EMB_SPACE_COLORS)
         ]
@@ -244,7 +284,7 @@ class Emma:
         # Add the embedding space
         self.emb[emb_space_name] = {
             "emb": embeddings,
-            "colour": self._assign_colour_to_embedding_space(len(self.emb)),
+            "color": self._assign_color_to_embedding_space(len(self.emb)),
         }
 
         print(f"Embedding space '{emb_space_name}' added successfully.")
@@ -341,21 +381,21 @@ class Emma:
             
         else:
 
-            if metric == "sqeuclidean_normalised":
+            if metric == "sqeuclidean_normalized":
                 # divide each row by its norm
                 emb_norm = np.linalg.norm(emb, axis=1)
                 emb = emb / emb_norm[:, None]  # divide each row by its norm
                 emb_pwd = squareform(pdist(emb, metric="sqeuclidean"))
                 return emb_pwd
 
-            elif metric == "euclidean_normalised":
+            elif metric == "euclidean_normalized":
                 # divide each row of the emb by its norm
                 emb_norm = np.linalg.norm(emb, axis=1)
                 emb = emb / emb_norm[:, None]  # divide each row by its norm
                 emb_pwd = squareform(pdist(emb, metric="euclidean"))
                 return emb_pwd
 
-            elif metric == "cityblock_normalised":
+            elif metric == "cityblock_normalized":
                 emb_pwd = squareform(
                     pdist(emb, metric="cityblock")
                 )
@@ -371,69 +411,174 @@ class Emma:
             emb_pwd = squareform(pdist(embeddings, metric=metric))
             return emb_pwd
 
-    def calculate_pairwise_distances(
-        self, emb_space: str, metric: str = "euclidean"
-    ):
-        """Calculate pairwise distances between samples in an embedding space.\
-            Will store the distances in the Emma object.
-            Will also calculate and store the ranks based on the distances.
+    def __compute_knn_ranks(
+        self, emb_space: str, metric: str, k: int
+    ) -> np.ndarray:
+        """Compute top-k nearest-neighbor ranks in batches without building
+        or storing the full N×N distance matrix.
+
+        Supports euclidean, cityblock, cosine, and the normalized/adjusted
+        variants by preprocessing the embedding matrix before batching.
+        Falls back to the full-matrix path for metrics that require it
+        (e.g. mahalanobis, sqeuclidean).
 
         Args:
-        emb_space (str): Name of the embedding space.
-        metric (str): Distance metric to use. Default 'euclidean'.
+            emb_space (str): Name of the embedding space.
+            metric (str): Distance metric.
+            k (int): Number of nearest neighbors to return.
+
+        Returns:
+            np.ndarray: Array of shape (n_samples, k) with sorted neighbor indices.
+        """
+        emb = self.emb[emb_space]["emb"].copy()
+
+        # Apply any per-metric preprocessing to the embedding matrix.
+        scipy_metric = metric
+        if metric == "sqeuclidean_normalized":
+            norms = np.linalg.norm(emb, axis=1, keepdims=True)
+            emb = emb / np.where(norms == 0, 1, norms)
+            scipy_metric = "sqeuclidean"
+        elif metric == "euclidean_normalized":
+            norms = np.linalg.norm(emb, axis=1, keepdims=True)
+            emb = emb / np.where(norms == 0, 1, norms)
+            scipy_metric = "euclidean"
+        elif metric == "cityblock_normalized":
+            scipy_metric = "cityblock"
+        elif metric == "adjusted_cosine":
+            emb = emb - np.median(emb, axis=0)
+            scipy_metric = "cosine"
+
+        n = len(emb)
+        ranked = np.empty((n, k), dtype=np.int32)
+        batch_size = GPU_BATCH_SIZE
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+
+        if device == "cuda" and metric in ("euclidean", "cityblock", "cosine",
+                                            "sqeuclidean_normalized",
+                                            "euclidean_normalized",
+                                            "cityblock_normalized",
+                                            "adjusted_cosine"):
+            print(f"Using GPU for kNN computation ({metric}).")
+            emb_t = torch.tensor(emb, dtype=torch.float32, device=device)
+            if scipy_metric in ("cosine", "sqeuclidean"):
+                emb_t = torch.nn.functional.normalize(emb_t, p=2, dim=1)
+
+            for start in tqdm(range(0, n, batch_size), desc=f"Computing kNN ({metric})"):
+                end = min(start + batch_size, n)
+                batch = emb_t[start:end]
+
+                if scipy_metric in ("euclidean", "euclidean_normalized"):
+                    dists = torch.cdist(batch, emb_t, p=2)
+                elif scipy_metric == "sqeuclidean":
+                    dists = torch.cdist(batch, emb_t, p=2) ** 2
+                elif scipy_metric == "cityblock":
+                    dists = torch.cdist(batch, emb_t, p=1)
+                    if metric == "cityblock_normalized":
+                        dists = dists / emb.shape[1]
+                else:  # cosine (including adjusted_cosine)
+                    dists = 1.0 - batch @ emb_t.T
+
+                # Exclude self by setting the diagonal to inf
+                for local_i in range(end - start):
+                    dists[local_i, start + local_i] = float("inf")
+
+                topk = torch.topk(dists, k, largest=False).indices.cpu().numpy()
+                ranked[start:end] = topk
+
+        else:
+            # CPU path: batch with scipy cdist to avoid the full N×N matrix.
+            from scipy.spatial.distance import cdist as scipy_cdist
+
+            for start in tqdm(range(0, n, batch_size), desc=f"Computing kNN ({metric})"):
+                end = min(start + batch_size, n)
+                dists = scipy_cdist(emb[start:end], emb, metric=scipy_metric)
+
+                if metric == "cityblock_normalized":
+                    dists /= emb.shape[1]
+
+                # Exclude self
+                for local_i in range(end - start):
+                    dists[local_i, start + local_i] = np.inf
+
+                # Partial sort: find k smallest per row
+                part = np.argpartition(dists, k, axis=1)[:, :k]
+                row_idx = np.arange(end - start)[:, None]
+                ranked[start:end] = part[row_idx, np.argsort(dists[row_idx, part], axis=1)]
+
+        return ranked
+
+    def calculate_pairwise_distances(
+        self, emb_space: str, metric: str = "euclidean",
+        store_distances: bool = False,
+    ):
+        """Calculate pairwise distances between samples in an embedding space.
+        Stores the top-k neighbor ranks in the Emma object.
+
+        Args:
+            emb_space (str): Name of the embedding space.
+            metric (str): Distance metric to use. Default 'euclidean'.
+            store_distances (bool): If True, also store the full N×N distance
+                matrix. This uses O(N²) memory and should only be used when the
+                matrix is explicitly needed (e.g. for within/between-class
+                distance analysis). Default False.
         """
         self._check_for_emb_space(emb_space)
         if metric not in DISTANCE_METRIC_ALIASES:
             raise ValueError(f"Distance metric {metric} not supported.")
 
-        if metric not in self.emb[emb_space].get("pairwise_distances", {}):
-            print(f"Calculating pairwise distances using {metric}...")
+        # Early-exit if ranks are already cached.
+        if metric in self.emb[emb_space].get("ranks", {}):
+            print(f"Pairwise distances using {metric} already calculated.")
+            return
 
+        print(f"Calculating pairwise distances using {metric}...")
+        n = len(self.sample_names)
+        k = min(500, n - 1)
+
+        if store_distances:
+            # N×N float32 matrix — warn early if this will likely OOM.
+            _check_memory(
+                n * n * 4,
+                label=f"calculate_pairwise_distances({metric}, store_distances=True)",
+            )
             emb_pwd = self.__compute_pairwise_distances(
                 emb_space, metric, self.emb[emb_space]["emb"]
             )
-            
-            # Compute ranks based on distances
-            if emb_pwd.shape[0] > 5000:
-                batch_size = GPU_BATCH_SIZE
-                k = 500
+
+            # Compute ranks from the stored distance matrix, excluding self.
+            # Self-distance is 0 so it always sorts to position 0; we request
+            # k+1 neighbors and drop position 0 to get k non-self neighbors.
+            if n > 5000:
                 ranked_indices_list = []
-
-                for start_idx in range(0, emb_pwd.shape[0], batch_size):
-                    end_idx = min(start_idx + batch_size, emb_pwd.shape[0])
-                    emb_pwd_batch = emb_pwd[start_idx:end_idx]
-
-                    partitioned_indices = np.argpartition(emb_pwd_batch, kth=k, axis=1)[:, :k]
-                    row_indices = np.arange(emb_pwd_batch.shape[0])[:, None]
-                    topk_distances = emb_pwd_batch[row_indices, partitioned_indices]
-                    sorted_topk_indices = np.argsort(topk_distances, axis=1)
-                    ranked_indices_batch = partitioned_indices[row_indices, sorted_topk_indices]
-
-                    ranked_indices_list.append(ranked_indices_batch)
-
+                for start_idx in range(0, n, GPU_BATCH_SIZE):
+                    end_idx = min(start_idx + GPU_BATCH_SIZE, n)
+                    batch = emb_pwd[start_idx:end_idx]
+                    part = np.argpartition(batch, kth=k, axis=1)[:, :k + 1]
+                    row_idx = np.arange(batch.shape[0])[:, None]
+                    sorted_part = part[row_idx, np.argsort(batch[row_idx, part], axis=1)]
+                    ranked_indices_list.append(sorted_part[:, 1:])  # drop self at col 0
                 ranked_indices = np.vstack(ranked_indices_list)
             else:
-                ranked_indices = np.argsort(emb_pwd, axis=1)
+                # Full sort; self (distance 0) is always at column 0 — drop it.
+                ranked_indices = np.argsort(emb_pwd, axis=1)[:, 1:]
 
             if "pairwise_distances" not in self.emb[emb_space]:
                 self.emb[emb_space]["pairwise_distances"] = {}
-            if "ranks" not in self.emb[emb_space]:
-                self.emb[emb_space]["ranks"] = {}
-
             self.emb[emb_space]["pairwise_distances"][metric] = emb_pwd
-            self.emb[emb_space]["ranks"][metric] = ranked_indices
-
         else:
-            print(f"Pairwise distances using {metric} already calculated.")
+            ranked_indices = self.__compute_knn_ranks(emb_space, metric, k)
+
+        if "ranks" not in self.emb[emb_space]:
+            self.emb[emb_space]["ranks"] = {}
+        self.emb[emb_space]["ranks"][metric] = ranked_indices
 
     def mean_center(self, emb_spaces: list = None):
         """Apply mean-centering to embedding spaces in-place.
 
-        Subtracts the per-dimension mean from each embedding space.
-        The original embeddings are preserved internally so the operation
-        can be reverted with revert_mean_centering().
-        Any cached pairwise distances, ranks, and 2-D projections are
-        cleared, since they were computed on the original embeddings.
+        Subtracts the per-dimension mean from each embedding space. The mean
+        vector is stored internally so the operation can be reverted with
+        revert_mean_centering(). Any cached pairwise distances, ranks, and 2-D
+        projections are cleared, since they were computed on the original embeddings.
 
         Args:
             emb_spaces (list, optional): Names of embedding spaces to centre.
@@ -445,17 +590,19 @@ class Emma:
             if self.emb[emb_space].get("_mean_centered", False):
                 print(f"'{emb_space}' is already mean-centred, skipping.")
                 continue
-            X = self.emb[emb_space]["emb"]
-            self.emb[emb_space]["_emb_original"] = X
-            self.emb[emb_space]["emb"] = X - X.mean(axis=0)
+            mean = self.emb[emb_space]["emb"].mean(axis=0)
+            self.emb[emb_space]["emb"] -= mean
             self.emb[emb_space]["_mean_centered"] = True
-            # Clear caches that depend on the raw embeddings
+            self.emb[emb_space]["_emb_mean"] = mean
             for key in ("pairwise_distances", "ranks", "annoy_index", "annoy_ranks", "2d"):
                 self.emb[emb_space].pop(key, None)
             print(f"'{emb_space}' mean-centred. Cached distances and projections cleared.")
 
     def revert_mean_centering(self, emb_spaces: list = None):
         """Revert mean-centred embedding spaces to their original values.
+
+        Adds back the stored per-dimension mean. Any cached pairwise distances,
+        ranks, and 2-D projections are cleared.
 
         Args:
             emb_spaces (list, optional): Names of embedding spaces to revert.
@@ -467,7 +614,7 @@ class Emma:
             if not self.emb[emb_space].get("_mean_centered", False):
                 print(f"'{emb_space}' is not mean-centred, skipping.")
                 continue
-            self.emb[emb_space]["emb"] = self.emb[emb_space].pop("_emb_original")
+            self.emb[emb_space]["emb"] += self.emb[emb_space].pop("_emb_mean")
             self.emb[emb_space]["_mean_centered"] = False
             for key in ("pairwise_distances", "ranks", "annoy_index", "annoy_ranks", "2d"):
                 self.emb[emb_space].pop(key, None)
@@ -491,22 +638,45 @@ class Emma:
             raise ValueError(f"Distance metric {metric} not supported.")
 
         if metric not in self.emb[emb_space].get("pairwise_distances", {}):
+            # store_distances=True required here — we must return the full matrix.
             self.calculate_pairwise_distances(
-                emb_space=emb_space, metric=metric
+                emb_space=emb_space, metric=metric, store_distances=True
             )
 
         return self.emb[emb_space]["pairwise_distances"][metric]
+
+    def free_pairwise_distances(
+        self, emb_space: str = None, metric: str = None
+    ) -> None:
+        """Release cached pairwise distance matrices to free memory.
+
+        Neighbor ranks are kept; only the full N×N distance matrix is freed.
+
+        Args:
+            emb_space (str, optional): Specific embedding space to free.
+                Defaults to None, which frees all spaces.
+            metric (str, optional): Specific metric to free within the space.
+                Defaults to None, which frees all metrics.
+        """
+        targets = [emb_space] if emb_space else list(self.emb.keys())
+        for space in targets:
+            self._check_for_emb_space(space)
+            if metric:
+                self.emb[space].get("pairwise_distances", {}).pop(metric, None)
+            else:
+                self.emb[space].pop("pairwise_distances", None)
+        print("Freed pairwise distance matrices.")
 
     def get_knn(
         self, emb_space: str, k: int, metric: str = "euclidean", 
         use_annoy: bool = False, annoy_metric: str = None, n_trees: int = None,
     ) -> np.ndarray:
-        """Get the k-nearest neighbours for each sample in an embedding space. \
-            Will calculate the neighbours if not already done.
+        """Get the k-nearest neighbors for each sample in an embedding space. \
+            Will calculate the neighbors if not already done.
 
         Args:
         emb_space (str): Name of the embedding space.
-        k (int): Number of neighbours to consider.
+        k (int): Number of neighbors to consider.
         metric (str): Distance metric to use. Default 'euclidean'.
         use_annoy (bool): Whether to use Annoy index. Default False.
         annoy_metric (str): Annoy distance metric to use. \
@@ -515,7 +685,7 @@ class Emma:
             Required if use_annoy is True.
 
         Returns:
-        np.ndarray: Indices of the k-nearest neighbours.
+        np.ndarray: Indices of the k-nearest neighbors.
         """
 
         # Validate input
@@ -542,21 +712,24 @@ class Emma:
             if n_trees not in self.emb[emb_space]["annoy_ranks"][annoy_metric]:
                 raise ValueError(f"No Annoy ranks with {n_trees} trees for metric '{annoy_metric}'.")
 
-            # Get Annoy index
+            # All stored annoy_ranks arrays exclude self (filtered in
+            # build_annoy_index), so col 0 is the closest real neighbor.
             ranked_indices = self.emb[emb_space]["annoy_ranks"][annoy_metric][n_trees]
 
             print(f"Using Annoy index with {n_trees} trees and {annoy_metric} metric.")
 
-            #return np.array(knn_indices, dtype=int)
-            return ranked_indices[:, 1 : k + 1]
-        
+            return ranked_indices[:, :k]
+
         try:
             ranked_indices = self.emb[emb_space]["ranks"][metric]
         except KeyError:
             self.calculate_pairwise_distances(emb_space, metric)
             ranked_indices = self.emb[emb_space]["ranks"][metric]
 
-        return ranked_indices[:, 1 : k + 1]
+        # All stored ranks arrays exclude self (whether computed via
+        # __compute_knn_ranks or the store_distances path), so col 0 is the
+        # closest real neighbor.
+        return ranked_indices[:, :k]
     
     def build_annoy_index(self, emb_space: str, n_trees: int = 50, 
                           metric: str = 'euclidean', random_seed: int = 42, max_k: int = 500):
@@ -595,23 +768,20 @@ class Emma:
         print(f"Building Annoy index with {n_trees} trees...")
         annoy_index.build(n_trees)
 
-        # Store the built index in the emb_space
-        if "annoy_index" not in self.emb[emb_space]:
-            self.emb[emb_space]["annoy_index"] = {}
-            self.emb[emb_space]["annoy_ranks"] = {}
-        if metric not in self.emb[emb_space]["annoy_index"]:
-            self.emb[emb_space]["annoy_index"][metric] = {}
-            self.emb[emb_space]["annoy_ranks"][metric] = {}
-        self.emb[emb_space]["annoy_index"][metric][n_trees] = annoy_index
-        
         knn_indices = []
-
         for i in range(len(self.emb[emb_space]["emb"])):
-            neighbors = annoy_index.get_nns_by_item(i, max_k + 1)  # fetch k+1 neighbors
-            neighbors = [n for n in neighbors if n != i][:max_k] 
+            neighbors = annoy_index.get_nns_by_item(i, max_k + 1)
+            neighbors = [n for n in neighbors if n != i][:max_k]
             knn_indices.append(neighbors)
+
+        # Store only the compact ranks array; drop the index object to free memory.
+        if "annoy_ranks" not in self.emb[emb_space]:
+            self.emb[emb_space]["annoy_ranks"] = {}
+        if metric not in self.emb[emb_space]["annoy_ranks"]:
+            self.emb[emb_space]["annoy_ranks"][metric] = {}
         self.emb[emb_space]["annoy_ranks"][metric][n_trees] = np.array(knn_indices, dtype=int)
-        
+        del annoy_index
+
         print(f"Annoy index for {emb_space} built successfully with {n_trees} trees.")
 
     # Dimensionality reduction
@@ -619,7 +789,7 @@ class Emma:
         self,
         emb_space: str,
         method: str = "PCA",
-        normalise: bool = True,
+        normalize: bool = True,
         random_state: int = 42,
         perplexity: int = 30,
         shuffle_umap: bool = True,
@@ -631,7 +801,7 @@ class Emma:
             emb_space (str): Name of an embedding space in the Emma instance.
             method (str, optional): Method for dimensionality reduction. \
                 Either "PCA", "TSNE", or "UMAP". Defaults to "PCA".
-            normalise (bool, optional): Whether to perform z-score normalisation \
+            normalize (bool, optional): Whether to perform z-score normalisation \
                 prior to dimensionality reduction. Defaults to True.
             random_state (int, optional): Random state for UMAP or TSNE. Defaults \
                 to 42.
@@ -647,7 +817,7 @@ class Emma:
 
         self.emb[emb_space]["2d"] = self.emb[emb_space].get("2d", dict())
         key = "__".join(
-            (str(arg) for arg in [method, normalise, random_state, perplexity, shuffle_umap])
+            (str(arg) for arg in [method, normalize, random_state, perplexity, shuffle_umap])
         )
         # cache
         if key in self.emb[emb_space]["2d"]:
@@ -656,7 +826,7 @@ class Emma:
         embeddings = self.emb[emb_space]["emb"]
         result = {}
 
-        if normalise:
+        if normalize:
             scaler = StandardScaler()
             embeddings = scaler.fit_transform(embeddings)
 
@@ -685,21 +855,21 @@ class Emma:
         self.emb[emb_space]["2d"][key] = result
         return result
 
-    def compute_within_between_distances(self, emb_space: str, metric: str, feature_category: str):
+    def compute_within_between_distances(self, emb_space: str, metric: str, feature: str):
         """Compute within-class and between-class distances for a feature category.
 
         Args:
             emb_space (str): Name of the embedding space.
             metric (str): Distance metric to use.
-            feature_category (str): Name of the feature category in metadata.
+            feature (str): Name of the feature category in metadata.
             
         Returns:
             dict: {class_value: {"within": [...], "between": [...]}}
         """
         
         self._check_for_emb_space(emb_space)
-        self._check_column_in_metadata(feature_category)
-        self._check_column_is_categorical(feature_category)
+        self._check_column_in_metadata(feature)
+        self._check_column_is_categorical(feature)
         
         if metric not in DISTANCE_METRIC_ALIASES:
             raise ValueError(f"Distance metric {metric} not supported.")
@@ -711,7 +881,7 @@ class Emma:
             )
         
         emb_pwd = self.emb[emb_space]["pairwise_distances"][metric]
-        labels = self.metadata[feature_category].values  # array of labels, one per sample
+        labels = self.metadata[feature].values  # array of labels, one per sample
         
         unique_classes = np.unique(labels)
         results = {}

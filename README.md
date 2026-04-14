@@ -29,7 +29,9 @@ or, if you prefer the `BibTeX` format:
 - **[Input](#input)**
 - **[Features](#features)**
     - **[Visualisation after dimensionality reduction](#visualisation-after-dimensionality-reduction)**
+    - **[Preprocessing](#preprocessing)**
     - **[Computation of pairwise distances](#computation-of-pairwise-distances)**
+    - **[Embedding space diagnostics](#embedding-space-diagnostics)**
     - **[Feature distribution across spaces](#feature-distribution-across-spaces)**
     - **[Pairwise space comparison](#pairwise-space-comparison)**
 - **[Installation and first steps](#installation)**
@@ -72,6 +74,16 @@ The `Emma` object is initialized with feature data and embedding spaces can be a
 
 EmmaEmb supports dimensionality reduction techniques such as PCA, t-SNE, and UMAP to visualize and analyze high-dimensional embeddings in lower-dimensional spaces. The plots can be colour coded by a feature of interest from the feature data.
 
+### Preprocessing
+
+Before computing distances, embeddings can be **mean-centred** in-place with `emma.mean_center()`.
+This can reduce anisotropy caused by a non-zero mean. The original embeddings are preserved and
+can be restored with `emma.revert_mean_centering()`. Note that any cached pairwise distances,
+ranks, and 2-D projections are cleared on centering, as they depend on the raw embeddings.
+
+Float16 embeddings are automatically cast to float32 when added to the `Emma` object to avoid
+overflow in downstream numerical operations such as pairwise distance computation.
+
 ### Computation of pairwise distances
 
 To make embedding spaces comparable, EmmaEmb analyses rely on comparing not individual embeddings, but the relationships between them. The library calculates pairwise distances between samples in each embedding space. Users can select from multiple distance metrics, including:
@@ -84,12 +96,21 @@ For parts of the analysis only the k-nearest neighbors are considered, which wil
 For large dataset sizes, EmmaEmb supports the option to approximate nearest neighbors.
 
 
+### Embedding space diagnostics
+
+EmmaEmb provides diagnostic tools to assess the geometric quality of an embedding space before comparison:
+
+- **Anisotropy** (`get_anisotropy_diagnostics`): Measures how uniformly the embedding space is occupied. High anisotropy indicates that embeddings cluster along a narrow cone, which can distort distance-based analyses. Results are returned as a `DiagnosticResult` with a human-readable summary.
+- **Hubness** (`get_hubness_diagnostics`): Detects samples that appear as near-neighbors far more often than expected by chance. Hubs can inflate KNN-based metrics and indicate degenerate geometry.
+
 ### Feature distribution across spaces
 
 For a selected feature from the feature data, EmmaEmb provides two metrics to assess the alignment of features across embedding spaces:
 
 - **KNN feature alignment scores**: Quantify the alignment of features by examining the nearest neighbors of each sample in different spaces. This score reveals the extent to which samples with a shared feature are embedded close to each other in different spaces.
 - **KNN class similarity matrix**: Measure the consistency of class-level relationships by assessing the overlap of nearest neighbors for samples within the same class across spaces. This provides insights into the relationships between classes in different embedding spaces.
+- **Alignment sensitivity plots**: Examine how KNN alignment scores vary with the choice of k (`plot_knn_alignment_across_k`), class imbalance (`plot_knn_alignment_vs_class_balance`), and label noise (`plot_knn_alignment_vs_feature_noise`). These help assess the robustness of the alignment metric.
+- **Within/between class distance distributions** (`plot_within_between_distributions`): Visualise the separation between within-class and between-class pairwise distances for a given embedding space.
 
 ### Pairwise space comparison
 
@@ -123,7 +144,7 @@ To get started with the EmmaEmb library, load the metadata and embeddings, and i
 
 ```python
 from emmaemb import Emma
-from emmaemb.vizualization import *
+from emmaemb.visualization import *
 
 # Initialize Emma object with feature data
 emma = Emma(feature_data=feature_data)

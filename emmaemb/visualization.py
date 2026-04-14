@@ -21,7 +21,7 @@ _METRIC_DISPLAY = {
 def _find_elbow(x: np.ndarray, y: np.ndarray) -> int:
     """Return the index of the elbow using the max-distance-from-chord method.
 
-    Both axes are normalised to [0, 1] before computing the perpendicular
+    Both axes are normalized to [0, 1] before computing the perpendicular
     distance from the line connecting the first and last points, so the result
     is scale-invariant.
     """
@@ -61,7 +61,7 @@ def plot_emb_space(
     emma: Emma,
     emb_space: str,
     method: str = "PCA",
-    normalise: bool = True,
+    normalize: bool = True,
     color_by: str = None,
     logarithmic_colors: bool = False,
     verbose_tooltips: bool = False,
@@ -71,24 +71,24 @@ def plot_emb_space(
 ) -> go.Figure:
     """Function to plot the embeddings of a given embedding space in 2D. \
     Dimensionality reduction is performed using PCA, TSNE, or UMAP.\
-    The dots are coloured by a column in the metadata.
+    The dots are colored by a column in the metadata.
 
     Args:
         emma (Emma): An instance of the Emma class.
         emb_space (str): Name of an embedding space in the Emma instance.
         method (str, optional): Method for dimensionality reduction. \
             Either "PCA", "TSNE", or "UMAP". Defaults to "PCA".
-        normalise (bool, optional): Whether to perform z-score normalisation \
+        normalize (bool, optional): Whether to perform z-score normalisation \
             prior to dimensionality reduction. Defaults to True.
         color_by (str, optional): A column name from the metadata stored in \
-            the Emma object, by which the dots are coloured. Defaults to None.
+            the Emma object, by which the dots are colored. Defaults to None.
         verbose_tooltips (bool, optional): Show all metadata on hover tooltips \
             rather than only the sample ID. Defaults to False.
         logarithmic_colors (bool, optional): Use a logarithmic scale to color by \
             a numerical column. Defaults to False.
         random_state (int, optional): Random state for UMAP or TSNE. Defaults \
             to 42.
-        perplexity (int, optional): Perplexity, only applied to UMAP.\
+        perplexity (int, optional): Perplexity, only applied to t-SNE.\
             Defaults to 30.
         shuffle_umap (bool, optional): Shuffle order of embeddings before \
             running UMAP. Defaults to True
@@ -100,7 +100,7 @@ def plot_emb_space(
     embeddings_2d = emma.get_2d(
             emb_space=emb_space,
             method=method,
-            normalise=normalise,
+            normalize=normalize,
             random_state=random_state,
             perplexity=perplexity,
             shuffle_umap=shuffle_umap
@@ -187,7 +187,7 @@ def plot_pairwise_distance_heatmap(
             Default is None.
         sample_labels (bool, optional): Whether to show sample names on the \
             x and y axes. Defaults to True.
-        color_scale (str, optional): Colour scale for the heatmap. \
+        color_scale (str, optional): Color scale for the heatmap. \
             Defaults to "Greys".
     Returns:
 
@@ -293,8 +293,8 @@ def plot_pairwise_distance_comparison(
         metric (str, optional): Distance metric to use. Defaults to "euclidean".
         title (str, optional): Title of the plot. Defaults to \
             "Pairwise Distance Comparison".
-        color (str, optional): Colour of the plot elements. Defaults to "blue".
-        group_by (str, optional): Metadata column name to group and colour \
+        color (str, optional): Color of the plot elements. Defaults to "blue".
+        group_by (str, optional): Metadata column name to group and color \
             the points. Defaults to None.
         point_opacity (float, optional): Opacity of the points. \
             Defaults to 0.5.
@@ -434,13 +434,13 @@ def plot_knn_alignment_across_embedding_spaces(
     Args:
         emma (Emma): An instance of the Emma class.
         feature (str): Name of the feature in the metadata.
-        k (int, optional): Number of nearest neighbours to consider. \
+        k (int, optional): Number of nearest neighbors to consider. \
             Defaults to 10.
         metric (str, optional): Distance metric to use. \
             Defaults to "euclidean".
         emb_space_order (list, optional): Order in which to display the \
             embedding spaces. Defaults to None.
-        color (str, optional): Colour of the plot elements. \
+        color (str, optional): Color of the plot elements. \
             Defaults to "#303496".
         use_annoy (bool, optional): Whether to use Annoy index. \
             Defaults to False.
@@ -478,9 +478,9 @@ def plot_knn_alignment_across_embedding_spaces(
 def plot_knn_alignment_across_k(
     emma: Emma,
     feature: str,
+    emb_spaces: list = None,
     k_values: list = None,
     metrics: list = None,
-    emb_spaces: list = None,
     color_discrete_map: dict = None,
     title: str = None,
     elbow_detection: bool = False,
@@ -495,7 +495,7 @@ def plot_knn_alignment_across_k(
     """Plot mean KNN feature alignment score vs k, faceted by distance metric.
 
     For each k and distance metric, computes the fraction of k nearest
-    neighbours that share the same label as the query point, then averages
+    neighbors that share the same label as the query point, then averages
     over all samples.  Two random baselines are shown:
 
     - **Uniform random** – expected score if all classes were equal-sized
@@ -515,7 +515,7 @@ def plot_knn_alignment_across_k(
         metrics: Distance metrics to show as facet columns.  Defaults to all
             metrics precomputed on the Emma object, in canonical order.
         emb_spaces: Embedding spaces to include.  Defaults to all spaces.
-        color_discrete_map: Mapping from embedding-space name to colour hex.
+        color_discrete_map: Mapping from embedding-space name to color hex.
         title: Plot title.  Defaults to ``"KNN feature alignment — <feature>"``.
         elbow_detection: If ``True``, annotate each curve with the elbow k
             found via the max-distance-from-chord method.
@@ -697,12 +697,12 @@ def plot_knn_alignment_across_classes(
     Args:
         emma (Emma): An instance of the Emma class.
         feature (str): Name of the feature in the metadata.
-        k (int, optional): Number of nearest neighbours to consider. \
+        k (int, optional): Number of nearest neighbors to consider. \
             Defaults to 10.
         metric (str, optional): Distance metric to use. Defaults to "euclidean".
         emb_space_order (list, optional): Order in which to display the \
             embedding spaces. Defaults to None.
-        color (str, optional): Colour of the plot elements. \
+        color (str, optional): Color of the plot elements. \
             Defaults to "#303496".
         use_annoy (bool, optional): Whether to use Annoy index. \
             Defaults to False.
@@ -775,7 +775,7 @@ def plot_knn_class_mixing_matrix(
         emma (Emma): An instance of the Emma class.
         emb_space (str): Name of the embedding space in the Emma instance.
         feature (str): Name of the feature in the metadata.
-        k (int, optional): Number of nearest neighbours to consider. \
+        k (int, optional): Number of nearest neighbors to consider. \
             Defaults to 10.
         metric (str, optional): Distance metric to use. Defaults to "euclidean".
         use_annoy (bool, optional): Whether to use Annoy index. \
@@ -837,7 +837,7 @@ def plot_low_similarity_distribution(
 
     emma._check_column_is_categorical(feature)
 
-    similarities = get_neighbourhood_similarity(
+    similarities = get_neighborhood_similarity(
         emma, emb_space_1, emb_space_2, k, metric, use_annoy, annoy_metric, n_trees
     )
 
@@ -929,18 +929,18 @@ def plot_knn_alignment_vs_class_balance(
     rightmost to the original.
 
     k-NN are computed within each balanced subset so that the metric is not
-    inflated by samples excluded from the subset.  For each metric, neighbours
+    inflated by samples excluded from the subset.  For each metric, neighbors
     are computed once for the largest k and reused for all smaller k values.
 
     **Precomputed ranks (fast path):** if pairwise distances for a metric have
     already been computed on the Emma object, the stored global rank matrix is
     reused.  For each subset, the rank list of each sample is filtered to only
-    keep neighbours that belong to the subset — no distance recomputation is
+    keep neighbors that belong to the subset — no distance recomputation is
     needed.  The filtering is fully vectorised using a stable argsort.
 
     **Fallback:** if ranks are not precomputed for a given metric the function
     computes k-NN within each subset using ``sklearn.NearestNeighbors``.
-    For cosine distance the embeddings are L2-normalised before fitting so
+    For cosine distance the embeddings are L2-normalized before fitting so
     that a tree-based index can be used instead of brute-force pairwise.
 
     Args:
@@ -957,7 +957,7 @@ def plot_knn_alignment_vs_class_balance(
         seed (int, optional): Random seed for reproducible downsampling.
             Defaults to 42.
         color_discrete_map (dict, optional): Mapping from embedding-space name
-            to colour hex.  Defaults to Plotly Set2 palette.
+            to color hex.  Defaults to Plotly Set2 palette.
         show_random_baselines (bool, optional): If True (default), draw the
             uniform and distribution-aware random baseline lines.
 
@@ -1023,21 +1023,21 @@ def plot_knn_alignment_vs_class_balance(
             in_subset[subset_idx] = True
 
             for emb_space in emb_spaces:
-                # ranks[i, 0] = i (self); neighbours start at col 1.
-                # For n > 5000 the Emma object stores only the top-500 neighbours
+                # ranks[i, 0] = i (self); neighbors start at col 1.
+                # For n > 5000 the Emma object stores only the top-500 neighbors
                 # (argpartition), so ranks.shape[1] may be < n_total.
                 ranks = emma.emb[emb_space]["ranks"][metric]
                 max_rank_col = ranks.shape[1] - 1   # last valid column index
 
-                # Buffer: enough to hold actual_k valid in-subset neighbours after
+                # Buffer: enough to hold actual_k valid in-subset neighbors after
                 # filtering.  Expected valid ≈ buffer × n_subset/n_total, so
                 # buffer = ceil(n_total/n_subset × actual_k × 5) is safe — capped
-                # at the number of stored neighbours.
+                # at the number of stored neighbors.
                 k_buffer = min(
                     int(np.ceil(n_total / n_subset * actual_k * 5)) + actual_k,
                     max_rank_col,
                 )
-                # Slice: (n_subset, k_buffer) of global neighbour indices
+                # Slice: (n_subset, k_buffer) of global neighbor indices
                 rank_slice = ranks[
                     subset_idx[:, None],
                     np.arange(1, k_buffer + 1)[None, :],
@@ -1048,7 +1048,7 @@ def plot_knn_alignment_vs_class_balance(
                 # preserving distance order within each group
                 sorted_pos = np.argsort(~valid_mask, axis=1, kind="stable")
 
-                # How many valid neighbours are guaranteed across all rows?
+                # How many valid neighbors are guaranteed across all rows?
                 # Use this to cap effective_k so we never pick invalid entries.
                 n_valid_min = int(valid_mask.sum(axis=1).min())
                 effective_k = min(actual_k, n_valid_min)
@@ -1164,7 +1164,7 @@ def plot_knn_alignment_vs_feature_noise(
             per noise level.  Mean and std are shown.  Defaults to 5.
         seed (int, optional): Base random seed.  Defaults to 42.
         color_discrete_map (dict, optional): Mapping from embedding-space name
-            to colour hex.  Defaults to Plotly Set2 palette.
+            to color hex.  Defaults to Plotly Set2 palette.
         show_random_baselines (bool, optional): If True (default), draw the
             uniform and distribution-aware random baseline lines.
 
@@ -1207,7 +1207,7 @@ def plot_knn_alignment_vs_feature_noise(
     for emb_space in emb_spaces:
         for metric in metrics:
             ranks = emma.emb[emb_space]["ranks"][metric]
-            # ranks[:, 0] = self; cap k at the number of stored neighbours
+            # ranks[:, 0] = self; cap k at the number of stored neighbors
             k_cap = ranks.shape[1] - 1
             # Pre-slice rank matrix for max usable k (reused across noise levels)
             k_use = min(max_k, k_cap)
@@ -1304,7 +1304,7 @@ def plot_knn_alignment_vs_feature_noise(
 
 
 def plot_within_between_distributions(emma: Emma, emb_space: str, metric: str,
-                                      feature_category: str, feature_class: str = None
+                                      feature: str, feature_class: str = None
                                       ) -> go.Figure:
     """
     Plot distributions of within-class and between-class distances
@@ -1316,7 +1316,7 @@ def plot_within_between_distributions(emma: Emma, emb_space: str, metric: str,
         emma (Emma): An instance of the Emma class.
         emb_space (str): Name of the embedding space to use.
         metric (str): The distance metric to use (e.g., "euclidean", "cosine").
-        feature_category (str): The feature category (e.g., "age", "disease_status") for classification.
+        feature (str): The feature category (e.g., "age", "disease_status") for classification.
         feature_class (str, optional): Specific feature class to visualize. If None, all classes are included.
         
     Returns:
@@ -1327,7 +1327,7 @@ def plot_within_between_distributions(emma: Emma, emb_space: str, metric: str,
     distances = emma.compute_within_between_distances(
         emb_space=emb_space,
         metric=metric,
-        feature_category=feature_category,
+        feature=feature,
     )
     feature_classes = []
     types = []
@@ -1358,7 +1358,7 @@ def plot_within_between_distributions(emma: Emma, emb_space: str, metric: str,
         facet_col="feature_class" if feature_class is None else None,
         marginal="box",
         nbins=50,
-        title=f"Within vs. Between Class Distances for {feature_category}" + 
+        title=f"Within vs. Between Class Distances for {feature}" + 
             (f" (Class: {feature_class})" if feature_class else ""),
         labels={"distance": "Distance", "type": "Type"},
         barmode="overlay",

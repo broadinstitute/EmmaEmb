@@ -161,8 +161,6 @@ def get_class_mixing_in_neighborhood(
 
     neighbor_class_counts = np.zeros((num_classes, num_classes), dtype=int)
 
-    rank_matrix = emma.emb[emb_space]["ranks"].get(metric)
-    
     neighboring_indices = emma.get_knn(
             emb_space=emb_space,
             k=k,
@@ -187,7 +185,7 @@ def get_class_mixing_in_neighborhood(
     return neighbor_class_counts, unique_classes
 
 
-def get_neighbourhood_similarity(
+def get_neighborhood_similarity(
     emma: Emma,
     emb_space_1: str,
     emb_space_2: str,
@@ -297,11 +295,11 @@ def get_anisotropy_diagnostics(
         avg_cos_sim_mc = np.nan
         anisotropy_score_mc = np.nan
         mc_helps = None
-        if check_mean_centering and anisotropy_score > 1:
-            X_mc = X - X.mean(axis=0)
-            avg_cos_sim_mc = _avg_cosine_sim(X_mc, idx_a, idx_b)
-            anisotropy_score_mc = avg_cos_sim_mc / expected_std
-            mc_helps = anisotropy_score_mc < anisotropy_score
+        # if check_mean_centering and anisotropy_score > 1:
+        X_mc = X - X.mean(axis=0)
+        avg_cos_sim_mc = _avg_cosine_sim(X_mc, idx_a, idx_b)
+        anisotropy_score_mc = avg_cos_sim_mc / expected_std
+        mc_helps = anisotropy_score_mc < anisotropy_score
 
         rows.append(
             {
@@ -370,13 +368,13 @@ def get_hubness_diagnostics(
 
     Two metrics are reported per embedding space:
     - k-occurrence distribution: how often each point appears as a k-nearest
-      neighbour of any other point.
+      neighbor of any other point.
     - Robin Hood index (RHI): a scalar summary of inequality in the
       k-occurrence distribution (0 = uniform, ~1 = extreme hubness).
 
     Args:
         emma (Emma): Emma object.
-        k (int): Number of nearest neighbours. Defaults to 10.
+        k (int): Number of nearest neighbors. Defaults to 10.
         metric (str): Distance metric. Defaults to "euclidean".
         use_annoy (bool): Whether to use Annoy index. Default False.
         annoy_metric (str): Annoy distance metric. Required if use_annoy True.
@@ -411,7 +409,7 @@ def get_hubness_diagnostics(
             n_trees=n_trees,
         )                                           # (n, k)
 
-        # Count how often each point index appears across all neighbour lists
+        # Count how often each point index appears across all neighbor lists
         k_occ = np.bincount(knn.ravel(), minlength=len(knn))
 
         mean_occ = k_occ.mean()
@@ -434,10 +432,10 @@ def get_hubness_diagnostics(
 
     context = (
         "Hubness is the tendency for a small number of points ('hubs') to "
-        "appear disproportionately often as k-nearest neighbours of other "
+        "appear disproportionately often as k-nearest neighbors of other "
         "points — a geometric phenomenon that grows with dimensionality. "
         "The k-occurrence distribution shows how many times each point was "
-        "selected as a neighbour; a heavy right tail indicates hub points. "
+        "selected as a neighbor; a heavy right tail indicates hub points. "
         "The Robin Hood index (RHI) quantifies this inequality: "
         "0 = perfectly uniform occurrence, ~1 = extreme hubness."
     )
