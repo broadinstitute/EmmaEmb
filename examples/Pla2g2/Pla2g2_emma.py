@@ -1,7 +1,7 @@
 import pandas as pd
 
 from emmaemb.core import Emma
-from emmaemb.vizualization import (
+from emmaemb.visualization import (
     plot_emb_dis_scatter, 
     plot_knn_alignment_across_embedding_spaces,
 )
@@ -36,7 +36,8 @@ for model_alias, model_name in models.items():
         embeddings_source=embedding_dir + model_name,
         emb_space_name=model_alias,
     )
-
+    
+ema.mean_center_emb_spaces()
 
 if "Fig_A1" in figures_to_be_plotted:
 
@@ -72,9 +73,9 @@ if "Fig_A2" in figures_to_be_plotted:
         emb_space_name_1="ESMC",
         emb_space_name_2="ProtT5",
         distance_metric=distance_metric,
-        colour_group="species",
-        colour_value_1="birds",
-        colour_value_2="birds",
+        color_group="species",
+        color_value_1="birds",
+        color_value_2="birds",
     )
 
     fig_A2.update_layout(
@@ -105,9 +106,9 @@ if "Fig_A3" in figures_to_be_plotted:
         emb_space_name_1="ESMC",
         emb_space_name_2="ProtT5",
         distance_metric=distance_metric,
-        colour_group="species",
-        colour_value_1="crocodile",
-        colour_value_2="crocodile",
+        color_group="species",
+        color_value_1="crocodile",
+        color_value_2="crocodile",
     )
 
     fig_A3.update_layout(
