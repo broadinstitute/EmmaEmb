@@ -919,6 +919,7 @@ def plot_knn_alignment_vs_class_balance(
     seed: int = 42,
     color_discrete_map: dict = None,
     show_random_baselines: bool = True,
+    return_data: bool = False,
 ) -> go.Figure:
     """Plot mean k-NN feature alignment score as a function of class balance.
 
@@ -1120,7 +1121,7 @@ def plot_knn_alignment_vs_class_balance(
 
     fig = update_fig_layout(fig)
     fig.update_layout(height=max(300, 220 * len(k_values) + 80))
-    return fig
+    return (fig, df) if return_data else fig
 
 
 def plot_knn_alignment_vs_feature_noise(
@@ -1134,6 +1135,7 @@ def plot_knn_alignment_vs_feature_noise(
     seed: int = 42,
     color_discrete_map: dict = None,
     show_random_baselines: bool = True,
+    return_data: bool = False,
 ) -> go.Figure:
     """Plot mean k-NN feature alignment score as a function of feature noise.
 
@@ -1300,7 +1302,7 @@ def plot_knn_alignment_vs_feature_noise(
     fig = update_fig_layout(fig)
     fig.update_layout(height=max(300, 220 * len(k_values) + 80))
     fig.for_each_xaxis(lambda ax: ax.update(tickformat=".0%"))
-    return fig
+    return (fig, df) if return_data else fig
 
 
 def plot_within_between_distributions(emma: Emma, emb_space: str, metric: str,

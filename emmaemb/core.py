@@ -67,6 +67,16 @@ class Emma:
             f"Numerical columns in meta data: {self.metadata_numeric_columns}"
         )
 
+        missing = feature_data.isnull().sum()
+        missing = missing[missing > 0]
+        if not missing.empty:
+            print("⚠ Missing values detected in metadata:")
+            for col, n in missing.items():
+                print(
+                    f"  '{col}': {n} missing value{'s' if n > 1 else ''} "
+                    f"({n / len(feature_data):.1%} of samples)"
+                )
+
     # Metadata
 
     def _get_numeric_columns(self) -> list:

@@ -1,3 +1,5 @@
+import warnings
+
 import pandas as pd
 import numpy as np
 
@@ -74,6 +76,18 @@ def get_knn_alignment_scores(
     if embedding_spaces is None:
         raise ValueError("No embeddings found in Emma object")
     emma._check_column_is_categorical(feature)
+
+    class_sizes = emma.metadata[feature].value_counts()
+    n_min_class = int(class_sizes.min())
+    if k >= n_min_class:
+        warnings.warn(
+            f"k={k} >= smallest class size (n_min={n_min_class}, "
+            f"class='{class_sizes.idxmin()}'). KNN alignment scores will be "
+            f"inflated for samples in that class. Use k < {n_min_class}.",
+            UserWarning,
+            stacklevel=2,
+        )
+
     # check if metric is already calculated
     if not use_annoy:
         for emb_space in embedding_spaces:
