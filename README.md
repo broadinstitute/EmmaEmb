@@ -122,34 +122,64 @@ jupyter lab colab_notebooks    # open notebook examples in jupyter for local exp
 To get started with the EmmaEmb library, load the metadata and embeddings, and initialize the `Emma` object. The following code snippet demonstrates how to use EmmaEmb to compare two embedding spaces:
 
 ```python
-from emmaemb import Emma
-from emmaemb.vizualization import *
+import numpy as np
+import pandas as pd
 
-# Initialize Emma object with feature data
-emma = Emma(feature_data=feature_data)
+from emmaemb.core import Emma
 
-# Add embedding spaces
-emma.add_embedding_space("ProtT5", "embeddings/prot_t5_embeddings")
-emma.add_embedding_space("ESM2", "embeddings/esm2_embeddings")
-
-# Compute pairwise distances
-emma.calculate_pairwise_distances("ProtT5", "cosine")
-emma.calculate_pairwise_distances("ESM2", "cosine")
-
-# Plot space after dimensionality reduction
-fig_1 = plot_emb_space(
-    emma, emb_space="ProtT5", color_by="enzyme_class", method="PCA"
+from emmaemb.vizualisation import (
+    plot_emb_space,
+    plot_knn_alignment_scores_across_k_and_distance_metrics,
+    plot_pairwise_distance_comparison
 )
 
-# Analyze global comparison of pairwise distances
-fig_2 = plot_pairwise_distance_comparison(
+# generate sample feature data and embeddings
+feature_data = [
+    ["sample1", "A", "human"],
+    ["sample2", "A", "mouse"],
+    ["sample3", "B", "human"],
+    ["sample4", "B", "mouse"],
+    ["sample5", "C", "human"],
+  ]
+feature_data = pd.DataFrame.from_records(feature_data * 5, columns=["sample_id", "enzyme_class", "species"])
+
+prot_t5_embs = np.random.rand(25, 100)
+esm2_embs   = np.random.rand(25, 100)
+
+np.save("prot_t5_embs.npy", prot_t5_embs)
+np.save("esm2_embs.npy", esm2_embs)
+
+# initiate Emma object and load embedding spaces
+emma = Emma(feature_data=feature_data)
+emma.add_emb_space(
+    embeddings_source="prot_t5_embs.npy",
+    emb_space_name="ProtT5")
+emma.add_emb_space(
+    embeddings_source="esm2_embs.npy",
+    emb_space_name="ESM2")
+
+# initial visual inspection
+fig_1 = plot_emb_space(emma, emb_space="ProtT5", color_by="enzyme_class", method="PCA")
+
+# calculation of pairwise distances
+distance_metrics = ['cosine', 'euclidean']
+for distance_metric in distance_metrics:
+    emma.calculate_pairwise_distances(emb_space="ProtT5", metric=distance_metric)
+    emma.calculate_pairwise_distances(emb_space="ESM2", metric=distance_metric)
+
+# visualize feature alignment
+fig_2 = plot_knn_alignment_scores_across_k_and_distance_metrics(
+    emma, feature="enzyme_class", k_values=[5, 10, 15, 20], metrics=["euclidean", "cosine"]
+)
+
+# compare embedding spaces directly
+fig_3 = plot_pairwise_distance_comparison(
     emma, emb_space_x="ProtT5", emb_space_y="ESM2", metric="cosine", group_by="species"
 )
 
-# Analyze feature distribution across spaces
-fig_3 = plot_knn_alignment_across_embedding_spaces(
-    emma, feature="enzyme_class", k=10, metric="cosine"
-)
+fig_1.show()
+fig_2.show()
+fig_3.show()
 ```
 
 A more detailed example can be found in the [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/broadinstitute/EmmaEmb/blob/main/examples/Pla2g2/emmaemb_pla2g2.ipynb) notebook.
@@ -181,7 +211,7 @@ The script supports the following models:
 
 ## Contact 
 
-If you have any questions or suggestions, please feel free to reach out to the authors: francesca.risom@hpi.de.
+If you have any questions or suggestions, please feel free to reach out to: francesca.risom@hpi.de.
 
 
 ## License

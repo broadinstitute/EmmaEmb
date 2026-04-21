@@ -48,6 +48,7 @@ dependencies = [
     "tzdata>=2025.1",
     "umap-learn>=0.5.7",
     "zipp>=3.20.2",
+    "nbformat>=4.2.0",
 ]
 
 [project.urls]

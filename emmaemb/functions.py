@@ -58,7 +58,7 @@ def get_knn_alignment_scores(
 
     all_results = []
     feature_classes = emma.metadata[feature]
-    feature_classes_array = feature_classes.values
+    feature_classes_array = feature_classes.values.to_numpy()
     class_distribution = feature_classes.value_counts(normalize=True).to_dict()
     
     for emb_space in embedding_spaces:

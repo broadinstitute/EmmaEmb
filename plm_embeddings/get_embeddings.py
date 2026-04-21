@@ -70,8 +70,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--per_protein",
-        type=bool,
-        default=False,
+        action="store_true",
         help="Aggregate embeddings per protein",
     )
     parser.add_argument(
