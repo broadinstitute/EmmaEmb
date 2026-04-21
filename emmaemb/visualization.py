@@ -12,6 +12,31 @@ from emmaemb.core import Emma
 from emmaemb.functions import *
 
 
+# Canonical metric ordering and display labels for KNN alignment plots
+_METRIC_ORDER = ["cosine", "cityblock", "euclidean"]
+_METRIC_DISPLAY = {
+    "cosine": "Cosine distance",
+    "cityblock": "Manhattan distance",
+    "euclidean": "Euclidean distance",
+}
+
+
+def _find_elbow(x: np.ndarray, y: np.ndarray) -> int:
+    """Return the index of the elbow using the max-distance-from-chord method.
+
+    Both axes are normalized to [0, 1] before computing the perpendicular
+    distance from the line connecting the first and last points, so the result
+    is scale-invariant.
+    """
+    x_n = (x - x[0]) / (x[-1] - x[0] + 1e-12)
+    span = y.max() - y.min()
+    y_n = (y - y[0]) / (span + 1e-12)
+    dx, dy = x_n[-1] - x_n[0], y_n[-1] - y_n[0]
+    norm = np.hypot(dx, dy) + 1e-12
+    dist = np.abs(dy * x_n - dx * y_n + dx * y_n[0] - dy * x_n[0]) / norm
+    return int(np.argmax(dist))
+
+
 def update_fig_layout(fig: go.Figure) -> go.Figure:
     """Update the layout of a plotly figure to adjust the font, line,\
         and grid settings.
@@ -39,7 +64,7 @@ def plot_emb_space(
     emma: Emma,
     emb_space: str,
     method: str = "PCA",
-    normalise: bool = True,
+    normalize: bool = True,
     color_by: str = None,
     logarithmic_colors: bool = False,
     verbose_tooltips: bool = False,
@@ -49,24 +74,24 @@ def plot_emb_space(
 ) -> go.Figure:
     """Function to plot the embeddings of a given embedding space in 2D. \
     Dimensionality reduction is performed using PCA, TSNE, or UMAP.\
-    The dots are coloured by a column in the metadata.
+    The dots are colored by a column in the metadata.
 
     Args:
         emma (Emma): An instance of the Emma class.
         emb_space (str): Name of an embedding space in the Emma instance.
         method (str, optional): Method for dimensionality reduction. \
             Either "PCA", "TSNE", or "UMAP". Defaults to "PCA".
-        normalise (bool, optional): Whether to perform z-score normalisation \
+        normalize (bool, optional): Whether to perform z-score normalisation \
             prior to dimensionality reduction. Defaults to True.
         color_by (str, optional): A column name from the metadata stored in \
-            the Emma object, by which the dots are coloured. Defaults to None.
+            the Emma object, by which the dots are colored. Defaults to None.
         verbose_tooltips (bool, optional): Show all metadata on hover tooltips \
             rather than only the sample ID. Defaults to False.
         logarithmic_colors (bool, optional): Use a logarithmic scale to color by \
             a numerical column. Defaults to False.
         random_state (int, optional): Random state for UMAP or TSNE. Defaults \
             to 42.
-        perplexity (int, optional): Perplexity, only applied to UMAP.\
+        perplexity (int, optional): Perplexity, only applied to t-SNE.\
             Defaults to 30.
         shuffle_umap (bool, optional): Shuffle order of embeddings before \
             running UMAP. Defaults to True
@@ -78,7 +103,7 @@ def plot_emb_space(
     embeddings_2d = emma.get_2d(
             emb_space=emb_space,
             method=method,
-            normalise=normalise,
+            normalize=normalize,
             random_state=random_state,
             perplexity=perplexity,
             shuffle_umap=shuffle_umap
@@ -165,7 +190,7 @@ def plot_pairwise_distance_heatmap(
             Default is None.
         sample_labels (bool, optional): Whether to show sample names on the \
             x and y axes. Defaults to True.
-        color_scale (str, optional): Colour scale for the heatmap. \
+        color_scale (str, optional): Color scale for the heatmap. \
             Defaults to "Greys".
     Returns:
 
@@ -271,8 +296,8 @@ def plot_pairwise_distance_comparison(
         metric (str, optional): Distance metric to use. Defaults to "euclidean".
         title (str, optional): Title of the plot. Defaults to \
             "Pairwise Distance Comparison".
-        color (str, optional): Colour of the plot elements. Defaults to "blue".
-        group_by (str, optional): Metadata column name to group and colour \
+        color (str, optional): Color of the plot elements. Defaults to "blue".
+        group_by (str, optional): Metadata column name to group and color \
             the points. Defaults to None.
         point_opacity (float, optional): Opacity of the points. \
             Defaults to 0.5.
@@ -412,13 +437,13 @@ def plot_knn_alignment_across_embedding_spaces(
     Args:
         emma (Emma): An instance of the Emma class.
         feature (str): Name of the feature in the metadata.
-        k (int, optional): Number of nearest neighbours to consider. \
+        k (int, optional): Number of nearest neighbors to consider. \
             Defaults to 10.
         metric (str, optional): Distance metric to use. \
             Defaults to "euclidean".
         emb_space_order (list, optional): Order in which to display the \
             embedding spaces. Defaults to None.
-        color (str, optional): Colour of the plot elements. \
+        color (str, optional): Color of the plot elements. \
             Defaults to "#303496".
         use_annoy (bool, optional): Whether to use Annoy index. \
             Defaults to False.
@@ -453,6 +478,210 @@ def plot_knn_alignment_across_embedding_spaces(
     return fig
 
 
+def plot_knn_alignment_across_k(
+    emma: Emma,
+    feature: str,
+    emb_spaces: list = None,
+    k_values: list = None,
+    metrics: list = None,
+    color_discrete_map: dict = None,
+    title: str = None,
+    elbow_detection: bool = False,
+    show_random_baselines: bool = True,
+    return_data: bool = False,
+    width: int = 1000,
+    height: int = 420,
+    use_annoy: bool = False,
+    annoy_metric: str = None,
+    n_trees: int = None,
+) -> go.Figure:
+    """Plot mean KNN feature alignment score vs k, faceted by distance metric.
+
+    For each k and distance metric, computes the fraction of k nearest
+    neighbors that share the same label as the query point, then averages
+    over all samples.  Two random baselines are shown:
+
+    - **Uniform random** – expected score if all classes were equal-sized
+      (``1 / n_classes``).
+    - **Distribution random** – expected score given the observed class
+      proportions (``sum(p_i^2)``); always ≥ the uniform baseline.
+
+    Facets are ordered Cosine → Manhattan → Euclidean when those metrics are
+    present.  The facet column titles show only the metric name (e.g.
+    "Cosine distance"), not the raw column label.
+
+    Args:
+        emma: Emma object with precomputed pairwise ranks for the requested
+            metrics.
+        feature: Categorical metadata column to use as the class label.
+        k_values: k values to evaluate.  Defaults to ``[5, 10, 20, 30, 50]``.
+        metrics: Distance metrics to show as facet columns.  Defaults to all
+            metrics precomputed on the Emma object, in canonical order.
+        emb_spaces: Embedding spaces to include.  Defaults to all spaces.
+        color_discrete_map: Mapping from embedding-space name to color hex.
+        title: Plot title.  Defaults to ``"KNN feature alignment — <feature>"``.
+        elbow_detection: If ``True``, annotate each curve with the elbow k
+            found via the max-distance-from-chord method.
+        show_random_baselines: If ``True`` (default), draw the uniform and
+            distribution-aware random baseline lines.
+        return_data: If ``True``, return a ``(fig, df_mean)`` tuple instead of
+            just the figure.  ``df_mean`` is the aggregated DataFrame with
+            columns ``k``, ``Embedding``, ``distance_metric``, ``Fraction``.
+            Defaults to ``False``.
+        width: Figure width in pixels.  Defaults to 1000.
+        height: Figure height in pixels.  Defaults to 420.
+        use_annoy: If ``True``, use the prebuilt Annoy index instead of the
+            precomputed rank matrix.  Defaults to ``False``.
+        annoy_metric: Annoy metric name to use.  Required when
+            ``use_annoy=True``.  Passed through to
+            ``get_knn_alignment_scores``.
+        n_trees: Number of Annoy trees.  Required when ``use_annoy=True``.
+
+    Returns:
+        go.Figure | tuple: Plotly figure, or ``(figure, df_mean)`` if
+            ``return_data=True``.
+    """
+    if k_values is None:
+        k_values = [5, 10, 20, 30, 50]
+    if emb_spaces is None:
+        emb_spaces = list(emma.emb.keys())
+
+    # Determine metrics and sort in canonical order
+    if metrics is None:
+        all_metrics: set = set()
+        for es in emb_spaces:
+            all_metrics.update(emma.emb[es].get("ranks", {}).keys())
+        metrics = [m for m in _METRIC_ORDER if m in all_metrics]
+        metrics += sorted(m for m in all_metrics if m not in _METRIC_ORDER)
+    else:
+        metrics = sorted(
+            metrics,
+            key=lambda m: _METRIC_ORDER.index(m) if m in _METRIC_ORDER else 99,
+        )
+
+    # Compute KNN alignment scores
+    rows = []
+    for metric in metrics:
+        for k in k_values:
+            scores = get_knn_alignment_scores(
+                emma, feature=feature, k=k, metric=metric,
+                use_annoy=use_annoy,
+                annoy_metric=annoy_metric if annoy_metric is not None else metric,
+                n_trees=n_trees,
+            )
+            scores["k"] = k
+            scores["distance_metric"] = metric
+            rows.append(scores)
+
+    knn_df = pd.concat(rows, ignore_index=True)
+    df_mean = (
+        knn_df
+        .groupby(["k", "Embedding", "distance_metric"], as_index=False)
+        .agg({"Fraction": "mean"})
+        .sort_values(["Embedding", "k"])
+    )
+
+    # Map metric keys to display labels
+    df_plot = df_mean.copy()
+    df_plot["distance_metric"] = df_plot["distance_metric"].map(
+        lambda m: _METRIC_DISPLAY.get(m, m)
+    )
+    metric_labels_ordered = [_METRIC_DISPLAY.get(m, m) for m in metrics]
+
+    # Random baselines
+    labels = emma.metadata[feature]
+    n_classes = int(labels.nunique())
+    uniform_baseline = 1.0 / n_classes
+    probs = labels.value_counts(normalize=True)
+    distribution_baseline = float((probs ** 2).sum())
+
+    if title is None:
+        title = f"KNN feature alignment — {feature}"
+
+    fig = px.line(
+        df_plot, x="k", y="Fraction",
+        color="Embedding",
+        facet_col="distance_metric",
+        category_orders={"distance_metric": metric_labels_ordered},
+        markers=True,
+        title=title,
+        labels={"Fraction": "Mean KNN feature<br>alignment score", "distance_metric": ""},
+        color_discrete_map=color_discrete_map,
+        template="plotly_white",
+        width=width, height=height,
+    )
+
+    # Strip "distance_metric=" prefix from facet column annotations
+    fig.for_each_annotation(lambda a: a.update(text=a.text.split("=")[-1]))
+
+    # Compute y-axis range including baselines if shown
+    y_vals = list(df_mean["Fraction"])
+    if show_random_baselines:
+        y_vals += [uniform_baseline, distribution_baseline]
+    y_min = min(y_vals)
+    y_max = max(y_vals)
+    y_pad = (y_max - y_min) * 0.12 or 0.05
+    y_range = [max(0.0, y_min - y_pad), min(1.0, y_max + y_pad)]
+
+    if show_random_baselines:
+        # Uniform random baseline
+        fig.add_hline(
+            y=uniform_baseline, line_dash="dot", line_color="grey",
+            annotation_text=f"uniform random ({uniform_baseline:.2f})",
+            annotation_position="bottom right",
+        )
+        # Distribution-aware baseline (only show when meaningfully different)
+        if abs(distribution_baseline - uniform_baseline) > 0.005:
+            fig.add_hline(
+                y=distribution_baseline, line_dash="dash", line_color="lightgrey",
+                annotation_text=f"distribution random ({distribution_baseline:.2f})",
+                annotation_position="top right",
+            )
+
+    # Styling
+    fig.update_traces(marker=dict(size=8), line=dict(width=3))
+    fig.update_layout(font=dict(family="Arial", size=13))
+    fig.update_xaxes(
+        showline=True, linecolor="black", linewidth=2, showgrid=False,
+        range=[0, max(k_values) * 1.08],
+        tick0=0,
+    )
+    fig.update_yaxes(
+        showline=True, linecolor="black", linewidth=2, showgrid=False,
+        range=y_range,
+    )
+
+    # Elbow detection: print a summary table of elbow k per (embedding, metric)
+    if elbow_detection:
+        k_arr = np.array(sorted(k_values), dtype=float)
+        elbow_rows = []
+        for metric, metric_label in zip(metrics, metric_labels_ordered):
+            for emb in emb_spaces:
+                subset = df_mean[
+                    (df_mean["Embedding"] == emb)
+                    & (df_mean["distance_metric"] == metric)
+                ].sort_values("k")
+                if len(subset) < 3:
+                    continue
+                y_arr = subset["Fraction"].values
+                elbow_idx = _find_elbow(k_arr, y_arr)
+                elbow_k = int(k_arr[elbow_idx])
+                elbow_score = float(y_arr[elbow_idx])
+                elbow_rows.append({
+                    "Embedding": emb,
+                    "Metric": metric_label,
+                    "Elbow k": elbow_k,
+                    "Score at elbow": round(elbow_score, 3),
+                })
+        if elbow_rows:
+            print("Elbow k (max-distance-from-chord method):")
+            print(pd.DataFrame(elbow_rows).to_string(index=False))
+
+    if return_data:
+        return fig, df_mean
+    return fig
+
+
 def plot_knn_alignment_across_classes(
     emma: Emma,
     feature: str,
@@ -471,12 +700,12 @@ def plot_knn_alignment_across_classes(
     Args:
         emma (Emma): An instance of the Emma class.
         feature (str): Name of the feature in the metadata.
-        k (int, optional): Number of nearest neighbours to consider. \
+        k (int, optional): Number of nearest neighbors to consider. \
             Defaults to 10.
         metric (str, optional): Distance metric to use. Defaults to "euclidean".
         emb_space_order (list, optional): Order in which to display the \
             embedding spaces. Defaults to None.
-        color (str, optional): Colour of the plot elements. \
+        color (str, optional): Color of the plot elements. \
             Defaults to "#303496".
         use_annoy (bool, optional): Whether to use Annoy index. \
             Defaults to False.
@@ -658,7 +887,7 @@ def plot_knn_class_mixing_matrix(
         emma (Emma): An instance of the Emma class.
         emb_space (str): Name of the embedding space in the Emma instance.
         feature (str): Name of the feature in the metadata.
-        k (int, optional): Number of nearest neighbours to consider. \
+        k (int, optional): Number of nearest neighbors to consider. \
             Defaults to 10.
         metric (str, optional): Distance metric to use. Defaults to "euclidean".
         use_annoy (bool, optional): Whether to use Annoy index. \
@@ -720,7 +949,7 @@ def plot_low_similarity_distribution(
 
     emma._check_column_is_categorical(feature)
 
-    similarities = get_neighbourhood_similarity(
+    similarities = get_neighborhood_similarity(
         emma, emb_space_1, emb_space_2, k, metric, use_annoy, annoy_metric, n_trees
     )
 
@@ -792,8 +1021,404 @@ def plot_low_similarity_distribution(
 
     return fig
 
-def plot_within_between_distributions(emma: Emma, emb_space: str, metric: str, 
-                                      feature_category: str, feature_class: str = None
+def plot_knn_alignment_vs_class_balance(
+    emma: Emma,
+    feature: str,
+    emb_spaces: list = None,
+    k_values: list = None,
+    metrics: list = None,
+    n_balance_steps: int = 8,
+    seed: int = 42,
+    color_discrete_map: dict = None,
+    show_random_baselines: bool = True,
+    return_data: bool = False,
+) -> go.Figure:
+    """Plot mean k-NN feature alignment score as a function of class balance.
+
+    Starting from the original (potentially imbalanced) dataset, each class is
+    progressively downsampled so that the maximum class size decreases toward
+    the size of the smallest class.  The x-axis shows the cap applied to each
+    class; the leftmost point corresponds to the fully balanced dataset and the
+    rightmost to the original.
+
+    k-NN are computed within each balanced subset so that the metric is not
+    inflated by samples excluded from the subset.  For each metric, neighbors
+    are computed once for the largest k and reused for all smaller k values.
+
+    **Precomputed ranks (fast path):** if pairwise distances for a metric have
+    already been computed on the Emma object, the stored global rank matrix is
+    reused.  For each subset, the rank list of each sample is filtered to only
+    keep neighbors that belong to the subset — no distance recomputation is
+    needed.  The filtering is fully vectorised using a stable argsort.
+
+    **Fallback:** if ranks are not precomputed for a given metric the function
+    computes k-NN within each subset using ``sklearn.NearestNeighbors``.
+    For cosine distance the embeddings are L2-normalized before fitting so
+    that a tree-based index can be used instead of brute-force pairwise.
+
+    Args:
+        emma (Emma): Emma object.
+        feature (str): Categorical metadata column to use as the class label.
+        emb_spaces (list, optional): Embedding spaces to compare.
+            Defaults to all spaces in the Emma object.
+        k_values (list of int, optional): k values to show as facet rows.
+            Defaults to [5, 10, 20].
+        metrics (list of str, optional): Distance metrics to show as facet
+            columns.  Defaults to ["euclidean"].
+        n_balance_steps (int, optional): Number of balance steps between the
+            smallest and largest class size.  Defaults to 8.
+        seed (int, optional): Random seed for reproducible downsampling.
+            Defaults to 42.
+        color_discrete_map (dict, optional): Mapping from embedding-space name
+            to color hex.  Defaults to Plotly Set2 palette.
+        show_random_baselines (bool, optional): If True (default), draw the
+            uniform and distribution-aware random baseline lines.
+
+    Returns:
+        go.Figure: Line plot faceted by k (rows) and metric (columns), with
+            one line per embedding space.
+    """
+    if k_values is None:
+        k_values = [5, 10, 20]
+    if metrics is None:
+        metrics = ["euclidean"]
+    if emb_spaces is None:
+        emb_spaces = list(emma.emb.keys())
+
+    emma._check_column_is_categorical(feature)
+    for emb_space in emb_spaces:
+        emma._check_for_emb_space(emb_space)
+
+    # Ensure ranks are precomputed for every requested (emb_space, metric) pair.
+    # calculate_pairwise_distances is idempotent — it skips if already cached.
+    for emb_space in emb_spaces:
+        for metric in metrics:
+            if metric not in emma.emb[emb_space].get("ranks", {}):
+                print(
+                    f"Computing pairwise distances for '{emb_space}' / '{metric}' "
+                    f"(will be cached for future calls)..."
+                )
+                emma.calculate_pairwise_distances(emb_space=emb_space, metric=metric)
+
+    class_labels = emma.metadata[feature].values
+    n_total = len(class_labels)
+    unique_classes = np.unique(class_labels)
+    class_indices = {cls: np.where(class_labels == cls)[0] for cls in unique_classes}
+    class_sizes = {cls: len(idx) for cls, idx in class_indices.items()}
+    min_class_size = min(class_sizes.values())
+    max_class_size = max(class_sizes.values())
+    max_k = max(k_values)
+    uniform_baseline = 1.0 / len(unique_classes)
+    probs = emma.metadata[feature].value_counts(normalize=True)
+    distribution_baseline = float((probs ** 2).sum())
+
+    # n_cap steps: small (balanced) → large (original)
+    n_caps = np.unique(
+        np.linspace(min_class_size, max_class_size, n_balance_steps).astype(int)
+    )
+
+    rng = np.random.default_rng(seed)
+    rows = []
+
+    for metric in metrics:
+        for n_cap in n_caps:
+            # Build subset indices: cap each class at n_cap
+            subset_idx = np.concatenate([
+                rng.choice(class_indices[cls], size=min(n_cap, class_sizes[cls]), replace=False)
+                for cls in unique_classes
+            ])
+            subset_labels = class_labels[subset_idx]
+            n_subset = len(subset_idx)
+            actual_k = min(max_k, n_subset - 1)
+
+            # Boolean mask over the full dataset: True = in current subset
+            in_subset = np.zeros(n_total, dtype=bool)
+            in_subset[subset_idx] = True
+
+            for emb_space in emb_spaces:
+                # ranks[i, 0] = i (self); neighbors start at col 1.
+                # For n > 5000 the Emma object stores only the top-500 neighbors
+                # (argpartition), so ranks.shape[1] may be < n_total.
+                ranks = emma.emb[emb_space]["ranks"][metric]
+                max_rank_col = ranks.shape[1] - 1   # last valid column index
+
+                # Buffer: enough to hold actual_k valid in-subset neighbors after
+                # filtering.  Expected valid ≈ buffer × n_subset/n_total, so
+                # buffer = ceil(n_total/n_subset × actual_k × 5) is safe — capped
+                # at the number of stored neighbors.
+                k_buffer = min(
+                    int(np.ceil(n_total / n_subset * actual_k * 5)) + actual_k,
+                    max_rank_col,
+                )
+                # Slice: (n_subset, k_buffer) of global neighbor indices
+                rank_slice = ranks[
+                    subset_idx[:, None],
+                    np.arange(1, k_buffer + 1)[None, :],
+                ]
+                valid_mask = in_subset[rank_slice]            # True = in subset
+
+                # Stable argsort moves valid (0 after ~) before invalid (1),
+                # preserving distance order within each group
+                sorted_pos = np.argsort(~valid_mask, axis=1, kind="stable")
+
+                # How many valid neighbors are guaranteed across all rows?
+                # Use this to cap effective_k so we never pick invalid entries.
+                n_valid_min = int(valid_mask.sum(axis=1).min())
+                effective_k = min(actual_k, n_valid_min)
+
+                knn_global = rank_slice[
+                    np.arange(n_subset)[:, None],
+                    sorted_pos[:, :effective_k],
+                ]                                             # (n_subset, effective_k)
+
+                for k in k_values:
+                    if k > effective_k:
+                        continue
+                    neighbor_labels = class_labels[knn_global[:, :k]]
+                    mean_score = float(
+                        (neighbor_labels == subset_labels[:, None]).mean()
+                    )
+                    rows.append({
+                        "Max samples per class": int(n_cap),
+                        "Total samples": n_subset,
+                        "Metric": _METRIC_DISPLAY.get(metric, metric),
+                        "Embedding": emb_space,
+                        "k": k,
+                        "Mean alignment score": mean_score,
+                    })
+
+    df = pd.DataFrame(rows)
+
+    metric_labels_ordered = [_METRIC_DISPLAY.get(m, m) for m in
+                             sorted(metrics, key=lambda m: _METRIC_ORDER.index(m)
+                             if m in _METRIC_ORDER else 99)]
+    k_order = sorted(k_values)
+
+    fig = px.line(
+        df,
+        x="Max samples per class",
+        y="Mean alignment score",
+        color="Embedding",
+        facet_row="k",
+        facet_col="Metric",
+        markers=True,
+        hover_data={"Total samples": True},
+        title=f"k-NN alignment vs class balance — {feature}",
+        labels={"Mean alignment score": "Mean KNN feature<br>alignment score"},
+        color_discrete_map=color_discrete_map,
+        color_discrete_sequence=None if color_discrete_map else px.colors.qualitative.Set2,
+        category_orders={"Metric": metric_labels_ordered, "k": k_order},
+        template="plotly_white",
+    )
+
+    # Fix facet annotations: "Metric=Cosine distance" → "Cosine distance"
+    #                         "k=5" → "k = 5"
+    fig.for_each_annotation(lambda a: a.update(
+        text=a.text.split("=")[-1] if a.text.startswith("Metric=")
+        else a.text.replace("k=", "k = ")
+    ))
+
+    if show_random_baselines:
+        fig.add_hline(
+            y=uniform_baseline, line_dash="dot", line_color="grey",
+            annotation_text=f"uniform random ({uniform_baseline:.2f})",
+            annotation_position="bottom right",
+        )
+        if abs(distribution_baseline - uniform_baseline) > 0.005:
+            fig.add_hline(
+                y=distribution_baseline, line_dash="dash", line_color="lightgrey",
+                annotation_text=f"distribution random ({distribution_baseline:.2f})",
+                annotation_position="top right",
+            )
+
+    fig = update_fig_layout(fig)
+    fig.update_layout(height=max(300, 220 * len(k_values) + 80))
+    return (fig, df) if return_data else fig
+
+
+def plot_knn_alignment_vs_feature_noise(
+    emma: Emma,
+    feature: str,
+    emb_spaces: list = None,
+    k_values: list = None,
+    metrics: list = None,
+    n_noise_steps: int = 10,
+    n_repeats: int = 5,
+    seed: int = 42,
+    color_discrete_map: dict = None,
+    show_random_baselines: bool = True,
+    return_data: bool = False,
+) -> go.Figure:
+    """Plot mean k-NN feature alignment score as a function of feature noise.
+
+    At each noise level a fraction of the feature values are randomly permuted
+    among the affected samples (i.e. features are swapped, not redrawn, so the
+    overall class distribution is preserved).  The x-axis runs from 0 (original
+    features) to 1 (all features permuted).  Multiple random permutations are run
+    at each noise level and the mean ± std is shown as a shaded band.
+
+    Because only features change — not the embedding geometry — distances never
+    need to be recomputed.  The function reads the precomputed rank matrix once
+    per (embedding space, metric) and slices it for each k, making the entire
+    sweep very fast.  Ranks are auto-computed via
+    ``emma.calculate_pairwise_distances`` if not already cached.
+
+    Args:
+        emma (Emma): Emma object.
+        feature (str): Categorical metadata column to use as the class feature.
+        emb_spaces (list, optional): Embedding spaces to compare.
+            Defaults to all spaces in the Emma object.
+        k_values (list of int, optional): k values to show as facet rows.
+            Defaults to [5, 10, 20].
+        metrics (list of str, optional): Distance metrics to show as facet
+            columns.  Defaults to ["euclidean"].
+        n_noise_steps (int, optional): Number of noise levels between 0 and 1
+            inclusive.  Defaults to 10.
+        n_repeats (int, optional): Number of independent random permutations
+            per noise level.  Mean and std are shown.  Defaults to 5.
+        seed (int, optional): Base random seed.  Defaults to 42.
+        color_discrete_map (dict, optional): Mapping from embedding-space name
+            to color hex.  Defaults to Plotly Set2 palette.
+        show_random_baselines (bool, optional): If True (default), draw the
+            uniform and distribution-aware random baseline lines.
+
+    Returns:
+        go.Figure: Line plot with shaded std band, faceted by k (rows) and
+            metric (columns), with one line per embedding space.
+    """
+    if k_values is None:
+        k_values = [5, 10, 20]
+    if metrics is None:
+        metrics = ["euclidean"]
+    if emb_spaces is None:
+        emb_spaces = list(emma.emb.keys())
+
+    emma._check_column_is_categorical(feature)
+    for emb_space in emb_spaces:
+        emma._check_for_emb_space(emb_space)
+
+    # Ensure ranks are cached for every (emb_space, metric) pair
+    for emb_space in emb_spaces:
+        for metric in metrics:
+            if metric not in emma.emb[emb_space].get("ranks", {}):
+                print(
+                    f"Computing pairwise distances for '{emb_space}' / '{metric}' "
+                    f"(will be cached for future calls)..."
+                )
+                emma.calculate_pairwise_distances(emb_space=emb_space, metric=metric)
+
+    class_features = emma.metadata[feature].values
+    n_total = len(class_features)
+    n_classes = len(np.unique(class_features))
+    uniform_baseline = 1.0 / n_classes
+    probs = emma.metadata[feature].value_counts(normalize=True)
+    distribution_baseline = float((probs ** 2).sum())
+    max_k = max(k_values)
+
+    noise_fracs = np.linspace(0, 1, n_noise_steps)
+    rows = []
+
+    for emb_space in emb_spaces:
+        for metric in metrics:
+            ranks = emma.emb[emb_space]["ranks"][metric]
+            # ranks[:, 0] = self; cap k at the number of stored neighbors
+            k_cap = ranks.shape[1] - 1
+            # Pre-slice rank matrix for max usable k (reused across noise levels)
+            k_use = min(max_k, k_cap)
+            knn_full = ranks[:, 1 : k_use + 1]   # (n, k_use) — never changes
+
+            for noise_frac in noise_fracs:
+                n_permute = round(n_total * noise_frac)
+
+                # noise_frac == 0: deterministic, no need for multiple repeats
+                repeats = 1 if n_permute == 0 else n_repeats
+
+                scores_per_k = {k: [] for k in k_values}
+
+                for rep in range(repeats):
+                    rng = np.random.default_rng(seed + rep)
+                    noisy_features = class_features.copy()
+                    if n_permute > 0:
+                        perm_idx = rng.choice(n_total, size=n_permute, replace=False)
+                        noisy_features[perm_idx] = rng.permutation(
+                            class_features[perm_idx]
+                        )
+
+                    for k in k_values:
+                        if k > k_use:
+                            continue
+                        neighbor_features = noisy_features[knn_full[:, :k]]  # (n, k)
+                        score = float(
+                            (neighbor_features == noisy_features[:, None]).mean()
+                        )
+                        scores_per_k[k].append(score)
+
+                for k in k_values:
+                    if not scores_per_k[k]:
+                        continue
+                    vals = scores_per_k[k]
+                    rows.append({
+                        "Noise fraction": float(noise_frac),
+                        "Metric": _METRIC_DISPLAY.get(metric, metric),
+                        "Embedding": emb_space,
+                        "k": k,
+                        "Mean alignment score": float(np.mean(vals)),
+                        "std": float(np.std(vals)),
+                    })
+
+    df = pd.DataFrame(rows)
+
+    metric_labels_ordered = [_METRIC_DISPLAY.get(m, m) for m in
+                             sorted(metrics, key=lambda m: _METRIC_ORDER.index(m)
+                             if m in _METRIC_ORDER else 99)]
+    k_order = sorted(k_values)
+
+    fig = px.line(
+        df,
+        x="Noise fraction",
+        y="Mean alignment score",
+        error_y="std",
+        color="Embedding",
+        facet_row="k",
+        facet_col="Metric",
+        markers=True,
+        title=f"k-NN alignment vs label noise — {feature}",
+        labels={
+            "Noise fraction": "Fraction of labels permuted",
+            "Mean alignment score": "Mean KNN feature<br>alignment score",
+        },
+        color_discrete_map=color_discrete_map,
+        color_discrete_sequence=None if color_discrete_map else px.colors.qualitative.Set2,
+        category_orders={"Metric": metric_labels_ordered, "k": k_order},
+        template="plotly_white",
+    )
+
+    fig.for_each_annotation(lambda a: a.update(
+        text=a.text.split("=")[-1] if a.text.startswith("Metric=")
+        else a.text.replace("k=", "k = ")
+    ))
+
+    if show_random_baselines:
+        fig.add_hline(
+            y=uniform_baseline, line_dash="dot", line_color="grey",
+            annotation_text=f"uniform random ({uniform_baseline:.2f})",
+            annotation_position="bottom right",
+        )
+        if abs(distribution_baseline - uniform_baseline) > 0.005:
+            fig.add_hline(
+                y=distribution_baseline, line_dash="dash", line_color="lightgrey",
+                annotation_text=f"distribution random ({distribution_baseline:.2f})",
+                annotation_position="top right",
+            )
+
+    fig = update_fig_layout(fig)
+    fig.update_layout(height=max(300, 220 * len(k_values) + 80))
+    fig.for_each_xaxis(lambda ax: ax.update(tickformat=".0%"))
+    return (fig, df) if return_data else fig
+
+
+def plot_within_between_distributions(emma: Emma, emb_space: str, metric: str,
+                                      feature: str, feature_class: str = None
                                       ) -> go.Figure:
     """
     Plot distributions of within-class and between-class distances
@@ -805,7 +1430,7 @@ def plot_within_between_distributions(emma: Emma, emb_space: str, metric: str,
         emma (Emma): An instance of the Emma class.
         emb_space (str): Name of the embedding space to use.
         metric (str): The distance metric to use (e.g., "euclidean", "cosine").
-        feature_category (str): The feature category (e.g., "age", "disease_status") for classification.
+        feature (str): The feature category (e.g., "age", "disease_status") for classification.
         feature_class (str, optional): Specific feature class to visualize. If None, all classes are included.
         
     Returns:
@@ -816,7 +1441,7 @@ def plot_within_between_distributions(emma: Emma, emb_space: str, metric: str,
     distances = emma.compute_within_between_distances(
         emb_space=emb_space,
         metric=metric,
-        feature_category=feature_category,
+        feature=feature,
     )
     feature_classes = []
     types = []
@@ -847,7 +1472,7 @@ def plot_within_between_distributions(emma: Emma, emb_space: str, metric: str,
         facet_col="feature_class" if feature_class is None else None,
         marginal="box",
         nbins=50,
-        title=f"Within vs. Between Class Distances for {feature_category}" + 
+        title=f"Within vs. Between Class Distances for {feature}" + 
             (f" (Class: {feature_class})" if feature_class else ""),
         labels={"distance": "Distance", "type": "Type"},
         barmode="overlay",

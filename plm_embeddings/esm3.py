@@ -86,10 +86,13 @@ class Esm3(EmbeddingHandler):
                     logits_output = client.logits(
                         protein_tensor, LogitsConfig(sequence=True, return_embeddings=True)
                     )
+                    embeddings = logits_output.embeddings[0]
+
                     if per_protein:
-                        embedding = logits_output.embeddings.mean(dim=1).cpu().numpy()[0]
+                        embedding = embeddings.mean(dim=0).cpu().numpy()
                     else:
-                        embedding = logits_output.embeddings.cpu().numpy()[0]
+                        valid_embeddings = embeddings[1:-1]    
+                        embedding = valid_embeddings.cpu().numpy()
                 
                 np.save(
                         output_file,

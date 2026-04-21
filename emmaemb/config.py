@@ -7,9 +7,9 @@ DISTANCE_METRIC_ALIASES = {
     "cityblock": "Manhattan",
     "cosine": "Cosine",
     "sqeuclidean": "Standardised Euclidean",
-    "sqeuclidean_normalised": "Normalised Standardised Euclidean",
-    "euclidean_normalised": "Normalised Euclidean",
-    "cityblock_normalised": "Normalised Manhattan",
+    "sqeuclidean_normalized": "Normalized Standardised Euclidean",
+    "euclidean_normalized": "Normalized Euclidean",
+    "cityblock_normalized": "Normalized Manhattan",
     "adjusted_cosine": "Adjusted Cosine",
     "mahalanobis": "Mahalanobis",
 }

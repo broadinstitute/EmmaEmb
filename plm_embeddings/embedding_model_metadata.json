@@ -53,12 +53,12 @@
         "embedding_handler": "EsmFair",
         "max_sequence_length": 1022
     },
-    "esmfold_v1": {
+    "facebook/esmfold_v1": {
         "model_name": "ESMFold",
-        "layers": "48 (+36)",
+        "layers": 48,
         "parameters": "690M (+3B)",
         "training_data": "UR50/D 2021_04",
-        "embedding_size": "-",
+        "embedding_size": 768,
         "embedding_handler": "EsmFair",
         "max_sequence_length": 1022
     },
@@ -164,36 +164,36 @@
     "esm3-sm-open-v1": {
         "model_name": "ESM-3",
         "embedding_handler": "Esm3",
-        "max_sequence_length": 1024
+        "max_sequence_length": 1022
     },
     "esmc-300m-2024-12": {
         "model_name": "ESM-C",
         "embedding_handler": "Esm3",
-        "max_sequence_length": 1024
+        "max_sequence_length": 1022
     },
     "Rostlab/prot_t5_xl_half_uniref50-enc": {
         "model_name": "ProtT5",
         "embedding_handler": "T5",
-        "max_sequence_length": 1024
+        "max_sequence_length": 1022
     },
     "Rostlab/ProstT5": {
         "model_name": "ProstT5",
         "embedding_handler": "T5",
-        "max_sequence_length": 1024
+        "max_sequence_length": 1022
     },
     "Rostlab/prot_t5_xl_uniref50": {
         "model_name": "ProtT5",
         "embedding_handler": "T5",
-        "max_sequence_length": 1024
+        "max_sequence_length": 1022
     },
     "ankh_base": {
         "model_name": "Ankh",
         "embedding_handler": "Ankh",
-        "max_sequence_length": 1024
+        "max_sequence_length": 1022
     },
     "ankh_large": {
         "model_name": "Ankh",
         "embedding_handler": "Ankh",
-        "max_sequence_length": 1024
+        "max_sequence_length": 1022
     }
 }

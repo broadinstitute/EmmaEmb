@@ -13,3 +13,6 @@ protein_models/**
 **/embeddings_chopped/**
 **/alphafold/**
 mmseqs/*
+examples/**
+!examples/Pla2g2/
+!examples/Pla2g2/pla2g2_embedding_diagnostics.ipynb
