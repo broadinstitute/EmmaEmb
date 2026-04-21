@@ -536,10 +536,11 @@ class Emma:
         if metric not in DISTANCE_METRIC_ALIASES:
             raise ValueError(f"Distance metric {metric} not supported.")
 
-        # Early-exit if ranks are already cached.
+        # Early-exit if everything needed is already cached.
         if metric in self.emb[emb_space].get("ranks", {}):
-            print(f"Pairwise distances using {metric} already calculated.")
-            return
+            if not store_distances or metric in self.emb[emb_space].get("pairwise_distances", {}):
+                print(f"Pairwise distances using {metric} already calculated.")
+                return
 
         print(f"Calculating pairwise distances using {metric}...")
         n = len(self.sample_names)
