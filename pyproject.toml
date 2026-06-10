@@ -10,7 +10,7 @@ exclude = ["examples/"]
 
 [project]
 name = "emmaemb"
-version = "1.2.2"
+version = "1.2.5"
 authors = [
   { name="Francesca Rissom", email="francesca.rissom@hpi.de" },
   { name="Paulo Yanez Sarmiento", email="paul.yanze@hpi.de" },
