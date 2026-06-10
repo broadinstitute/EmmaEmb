@@ -14,5 +14,16 @@ protein_models/**
 **/alphafold/**
 mmseqs/*
 examples/**
+!examples/__init__.py
+!examples/paper/
+!examples/paper/README.md
+!examples/paper/figures/
+!examples/paper/figures/**
+!examples/paper/preprocessing/
+!examples/paper/preprocessing/**
 !examples/Pla2g2/
-!examples/Pla2g2/pla2g2_embedding_diagnostics.ipynb
+!examples/Pla2g2/emmaemb_pla2g2.ipynb
+!examples/Pla2g2/Pla2g2_features.csv
+!examples/Pla2g2/README.md
+!examples/Pla2g2/embeddings/
+!examples/Pla2g2/embeddings/**

@@ -103,7 +103,7 @@ EmmaEmb provides diagnostic tools to assess the geometric quality of an embeddin
 - **Anisotropy** (`get_anisotropy_diagnostics`): Measures how uniformly the embedding space is occupied. High anisotropy indicates that embeddings cluster along a narrow cone, which can distort distance-based analyses. Results are returned as a `DiagnosticResult` with a human-readable summary.
 - **Hubness** (`get_hubness_diagnostics`): Detects samples that appear as near-neighbors far more often than expected by chance. Hubs can inflate KNN-based metrics and indicate degenerate geometry.
 
-These diagnostics are combined into a structured **6-step guided analysis workflow** for model ranking, demonstrated in [`examples/Pla2g2/emmaemb_pla2g2.ipynb`](examples/Pla2g2/emmaemb_pla2g2.ipynb): (1) anisotropy assessment and metric selection, (2) hubness assessment, (3) class distribution and k-range derivation, (4) parameter sensitivity analysis, (5) class imbalance robustness, and (6) feature noise robustness. The workflow produces a confidence-flagged model ranking.
+These diagnostics are combined into a structured **6-step guided analysis workflow** for embedding space ranking, demonstrated in [`examples/Pla2g2/emmaemb_pla2g2.ipynb`](examples/Pla2g2/emmaemb_pla2g2.ipynb): (1) anisotropy assessment and metric selection, (2) hubness assessment, (3) class distribution and k-range derivation, (4) parameter sensitivity analysis, (5) class imbalance robustness, and (6) feature noise robustness. The workflow produces a confidence-flagged embedding space ranking.
 
 ### Feature distribution across spaces
 

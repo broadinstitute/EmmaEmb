@@ -80,8 +80,11 @@ class Esm3(EmbeddingHandler):
                     output = client.forward_and_sample(
                         protein_tensor, SamplingConfig(return_per_residue_embeddings=True)
                     )
-                    # Mean pooling over residues for the sequence embedding
-                    embedding = output.per_residue_embedding.mean(dim=0).cpu().numpy()
+                    if per_protein:
+                        embedding = output.per_residue_embedding.mean(dim=0).cpu().numpy()
+                    else:
+                        # strip BOS/EOS tokens, keep per-residue embeddings
+                        embedding = output.per_residue_embedding[1:-1].cpu().numpy()
                 elif model_id == "esmc-300m-2024-12":
                     logits_output = client.logits(
                         protein_tensor, LogitsConfig(sequence=True, return_embeddings=True)
