@@ -536,10 +536,11 @@ class Emma:
         if metric not in DISTANCE_METRIC_ALIASES:
             raise ValueError(f"Distance metric {metric} not supported.")
 
-        # Early-exit if ranks are already cached.
+        # Early-exit if everything needed is already cached.
         if metric in self.emb[emb_space].get("ranks", {}):
-            print(f"Pairwise distances using {metric} already calculated.")
-            return
+            if not store_distances or metric in self.emb[emb_space].get("pairwise_distances", {}):
+                print(f"Pairwise distances using {metric} already calculated.")
+                return
 
         print(f"Calculating pairwise distances using {metric}...")
         n = len(self.sample_names)
@@ -884,13 +885,7 @@ class Emma:
         if metric not in DISTANCE_METRIC_ALIASES:
             raise ValueError(f"Distance metric {metric} not supported.")
         
-        if metric not in self.emb[emb_space].get("pairwise_distances", {}):
-            raise ValueError(
-                f"Pairwise distances for {metric} not calculated. \
-                    Please calculate them first."
-            )
-        
-        emb_pwd = self.emb[emb_space]["pairwise_distances"][metric]
+        emb_pwd = self.get_pairwise_distances(emb_space, metric)
         labels = self.metadata[feature].values  # array of labels, one per sample
         
         unique_classes = np.unique(labels)

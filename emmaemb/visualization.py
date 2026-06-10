@@ -197,21 +197,11 @@ def plot_pairwise_distance_heatmap(
         go.Figure: A heatmap of pairwise distances between samples.
     """
 
-    # Ensure pairwise distances are calculated
     emma._check_for_emb_space(emb_space)
-    if metric not in emma.emb[emb_space].get("pairwise_distances", {}):
-        raise ValueError(
-            f"Pairwise distances for metric {metric} not found. \
-            Run `calculate_pairwise_distances` first."
-        )
-    if group_by:
-        if group_by not in emma.metadata.columns:
-            raise ValueError(
-                f"Group column '{group_by}' not found in metadata."
-            )
+    if group_by and group_by not in emma.metadata.columns:
+        raise ValueError(f"Group column '{group_by}' not found in metadata.")
 
-    # retrieve pairwise distances and sample names
-    pairwise_distances = emma.emb[emb_space]["pairwise_distances"][metric]
+    pairwise_distances = emma.get_pairwise_distances(emb_space, metric)
     sample_names = emma.sample_names if sample_labels else None
 
     if group_by is not None:
@@ -306,19 +296,13 @@ def plot_pairwise_distance_comparison(
         go.Figure: A scatter plot comparing pairwise distances between \
         samples in two embedding spaces.
     """
-    # Ensure both embedding spaces exist and pairwise distances are calculated
     for emb_space in [emb_space_x, emb_space_y]:
         emma._check_for_emb_space(emb_space)
-        if metric not in emma.emb[emb_space].get("pairwise_distances", {}):
-            raise ValueError(
-                f"Pairwise distances for metric {metric} not found \
-                    in {emb_space}. Run `calculate_pairwise_distances` first."
-            )
 
     neutral_color: str = "#CCCCCC"
 
-    emb_pwd_1 = emma.emb[emb_space_x]["pairwise_distances"][metric]
-    emb_pwd_2 = emma.emb[emb_space_y]["pairwise_distances"][metric]
+    emb_pwd_1 = emma.get_pairwise_distances(emb_space_x, metric)
+    emb_pwd_2 = emma.get_pairwise_distances(emb_space_y, metric)
 
     group_labels = None
     if group_by:
