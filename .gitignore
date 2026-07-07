@@ -21,6 +21,11 @@ examples/**
 !examples/paper/figures/**
 !examples/paper/preprocessing/
 !examples/paper/preprocessing/**
+!examples/paper/data/
+!examples/paper/data/*/
+!examples/paper/data/*/raw/
+!examples/paper/data/*/raw/**
+!examples/shared_figures.py
 !examples/Pla2g2/
 !examples/Pla2g2/emmaemb_pla2g2.ipynb
 !examples/Pla2g2/Pla2g2_features.csv
