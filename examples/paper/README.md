@@ -40,7 +40,7 @@ examples/paper/
 ## Workflow
 
 ### Step 1: Preprocessing
-Run `preprocessing/0N_<dataset>.ipynb`. Raw data files are downloaded automatically on first run. Processed outputs are written to `data/<dataset>/processed/`.
+Run `preprocessing/0N_<dataset>.ipynb`. Raw data files are downloaded automatically on first run and a backup is stored in `examples/paper/data/<dataset>/raw/`. Processed outputs are written to `examples/paper/data/<dataset>/processed/`.
 
 ### Step 2: Generating embeddings
 Use [`plm_embeddings/get_embeddings.py`](../../plm_embeddings/get_embeddings.py) to generate embeddings from each PLM and place them in `data/<dataset>/embeddings/<ModelName>/`.
