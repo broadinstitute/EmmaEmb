@@ -6,20 +6,21 @@ Although designed for the application on embeddings of molecular biology data (e
 
 ## How to cite
 
-If you use EmmaEmb, please cite the [pre-print](https://www.biorxiv.org/content/10.1101/2024.06.21.600139v2):
+If you use EmmaEmb, please cite the:
 
-- *Rissom, P. F., Yanez Sarmiento, P., Safer, J., Coley, C. W., Renard, B. Y., Heyne, H. O., Iqbal, S. Decoding protein language models: insights from embedding space analysis. bioRxiv (2025), [https://doi.org/10.1101/2024.06.21.600139](https://doi.org/10.1101/2024.06.21.600139)*
+- *Rissom, P. F., Škrhák, V., Yanez Sarmiento, P., Safer, J., Coley, C. W., Renard, B. Y., Heyne, H. O., Iqbal, S. EmmaEmb: A quantitative framework for analyzing embedding spaces in molecular biology. Patterns (2026), [https://doi.org/10.1016/j.patter.2026.101635](https://doi.org/10.1016/j.patter.2026.101635)*
 
 or, if you prefer the `BibTeX` format:
 
 ```
-@article {Rissom2024.06.21.600139,
-	author = {Rissom, Pia Francesca and Sarmiento, Paulo Yanez and Safer, Jordan and Coley, Connor W. and Renard, Bernhard Y. and Heyne, Henrike O. and Iqbal, Sumaiya},
-	title = {Decoding protein language models: insights from embedding space analysis},
-	year = {2025},
-	doi = {10.1101/2024.06.21.600139},
-	publisher = {Cold Spring Harbor Laboratory},
-	journal = {bioRxiv}
+@article{rissom,
+	title = {{EmmaEmb}: A quantitative framework for analyzing embedding spaces in molecular biology},
+	issn = {2666-3899},
+	url = {https://doi.org/10.1016/j.patter.2026.101635},
+	doi = {10.1016/j.patter.2026.101635},
+	journaltitle = {Patterns},
+	publisher = {Elsevier},
+	author = {Rissom, Pia Francesca and Škrhák, Vít and Yanez Sarmiento, Paulo and Safer, Jordan F. and Coley, Connor W. and Renard, Bernhard Y. and Heyne, Henrike O. and Iqbal, Sumaiya},
 }
 ```
 
